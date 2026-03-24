@@ -164,6 +164,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 			targetWorkflow.GetMutableState(),
 			targetWorkflowSnapshot,
 			targetWorkflowEventsSeq,
+			historyi.TransactionPolicyPassive,
 		)
 	}
 
@@ -180,6 +181,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 		targetWorkflow.GetMutableState(),
 		targetWorkflowSnapshot,
 		targetWorkflowEventsSeq,
+		historyi.TransactionPolicyPassive,
 	)
 }
 
@@ -254,6 +256,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 		ms,
 		targetWorkflowSnapshot,
 		targetWorkflowEventsSeq,
+		historyi.TransactionPolicyPassive,
 	)
 	switch err.(type) {
 	case nil:

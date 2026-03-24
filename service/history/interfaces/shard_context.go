@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/pingable"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
@@ -106,6 +107,8 @@ type (
 		GetFinalizer() *finalizer.Finalizer
 
 		ChasmRegistry() *chasm.Registry
+
+		GetWorkflowIDReuseRL(namespaceID namespace.ID, workflowID string) quotas.RateLimiter
 	}
 
 	// A ControllableContext is a Context plus other methods needed by

@@ -862,6 +862,7 @@ func (e *ChasmEngine) persistAsBrandNew(
 		newExecutionParams.mutableState,
 		newExecutionParams.snapshot,
 		newExecutionParams.events,
+		historyi.TransactionPolicyActive,
 	)
 	if err == nil {
 		return currentExecutionInfo{}, false, nil
@@ -1047,6 +1048,7 @@ func (e *ChasmEngine) handleReusePolicy(
 		newExecutionParams.mutableState,
 		newExecutionParams.snapshot,
 		newExecutionParams.events,
+		historyi.TransactionPolicyActive,
 	)
 	if err != nil {
 		return chasm.StartExecutionResult{}, err

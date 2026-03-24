@@ -122,6 +122,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandNew(
 		mutableState,
 		workflowSnapshot,
 		workflowEventsSeq,
+		gomock.Any(),
 	).Return(nil)
 
 	err := s.createMgr.dispatchForNewWorkflow(ctx, chasm.WorkflowArchetypeID, newWorkflow)
@@ -195,6 +196,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsC
 		targetMutableState,
 		targetWorkflowSnapshot,
 		targetWorkflowEventsSeq,
+		gomock.Any(),
 	).Return(nil)
 
 	err := s.createMgr.dispatchForNewWorkflow(ctx, chasm.WorkflowArchetypeID, targetWorkflow)
@@ -264,6 +266,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 		targetMutableState,
 		targetWorkflowSnapshot,
 		targetWorkflowEventsSeq,
+		gomock.Any(),
 	).Return(nil)
 	targetContext.EXPECT().ReapplyEvents(gomock.Any(), s.mockShard, targetWorkflowEventsSeq).Return(nil)
 
@@ -343,6 +346,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 		targetMutableState,
 		targetWorkflowSnapshot,
 		targetWorkflowEventsSeq,
+		gomock.Any(),
 	).Return(nil)
 	targetContext.EXPECT().ReapplyEvents(gomock.Any(), s.mockShard, eventsToApply).Return(nil)
 
@@ -413,6 +417,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsZ
 		targetMutableState,
 		targetWorkflowSnapshot,
 		targetWorkflowEventsSeq,
+		gomock.Any(),
 	).Return(&persistence.WorkflowConditionFailedError{})
 	targetContext.EXPECT().ReapplyEvents(gomock.Any(), s.mockShard, targetWorkflowEventsSeq).Return(nil)
 
