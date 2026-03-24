@@ -1445,7 +1445,7 @@ func (s *WorkerDeploymentSuite) Test_CreateWorkerDeploymentVersion_Success() {
 				s.Contains(state.State.Versions, version)
 				s.Equal(version, state.State.Versions[version].Version)
 				s.Equal(requestID, state.State.Versions[version].CreateRequestId)
-				s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, state.State.Versions[version].Status)
+				s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED, state.State.Versions[version].Status)
 				s.NotNil(state.State.Versions[version].CreateTime)
 			},
 		}, &deploymentspb.CreateWorkerDeploymentVersionArgs{
