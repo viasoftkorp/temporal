@@ -150,6 +150,30 @@ type (
 	}
 )
 
+func (wh *WorkflowHandler) CreateWorkerDeploymentVersion(
+	ctx context.Context,
+	request *workflowservice.CreateWorkerDeploymentVersionRequest,
+) (*workflowservice.CreateWorkerDeploymentVersionResponse, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (wh *WorkflowHandler) UpdateWorkerDeploymentVersionComputeConfig(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkerDeploymentVersionComputeConfigRequest,
+) (*workflowservice.UpdateWorkerDeploymentVersionComputeConfigResponse, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (wh *WorkflowHandler) ValidateWorkerDeploymentVersionComputeConfig(
+	ctx context.Context,
+	request *workflowservice.ValidateWorkerDeploymentVersionComputeConfigRequest,
+) (*workflowservice.ValidateWorkerDeploymentVersionComputeConfigResponse, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 // NewWorkflowHandler creates a gRPC handler for workflowservice
 func NewWorkflowHandler(
 	config *Config,
@@ -3236,7 +3260,7 @@ func (wh *WorkflowHandler) GetSystemInfo(ctx context.Context, request *workflows
 			BuildIdBasedVersioning:          true,
 			CountGroupByExecutionStatus:     true,
 			Nexus:                           wh.httpEnabled && wh.config.EnableNexusAPIs(),
-			ServerlessDeployments:           true,
+			ServerScaledDeployments:         true,
 		},
 	}, nil
 }
@@ -3850,7 +3874,6 @@ func (wh *WorkflowHandler) CreateWorkerDeployment(ctx context.Context, request *
 		ctx,
 		namespaceEntry,
 		request.DeploymentName,
-		request.GetComputeConfig(),
 		request.Identity,
 		requestID,
 	)
