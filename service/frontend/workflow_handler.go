@@ -193,6 +193,7 @@ func (wh *WorkflowHandler) CreateWorkerDeploymentVersion(
 		request.GetDeploymentVersion().GetBuildId(),
 		request.Identity,
 		requestID,
+		request.GetComputeConfig(),
 	)
 	if err != nil {
 		return nil, err
