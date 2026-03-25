@@ -27,24 +27,29 @@ var File_temporal_server_chasm_lib_nexusoperation_proto_v1_service_proto protore
 
 const file_temporal_server_chasm_lib_nexusoperation_proto_v1_service_proto_rawDesc = "" +
 	"\n" +
-	"?temporal/server/chasm/lib/nexusoperation/proto/v1/service.proto\x121temporal.server.chasm.lib.nexusoperation.proto.v1\x1aHtemporal/server/chasm/lib/nexusoperation/proto/v1/request_response.proto\x1a0temporal/server/api/common/v1/api_category.proto\x1a.temporal/server/api/routing/v1/extension.proto2\xe4\x03\n" +
+	"?temporal/server/chasm/lib/nexusoperation/proto/v1/service.proto\x121temporal.server.chasm.lib.nexusoperation.proto.v1\x1aHtemporal/server/chasm/lib/nexusoperation/proto/v1/request_response.proto\x1a0temporal/server/api/common/v1/api_category.proto\x1a.temporal/server/api/routing/v1/extension.proto2\xc9\x05\n" +
 	"\x15NexusOperationService\x12\xdf\x01\n" +
 	"\x13StartNexusOperation\x12M.temporal.server.chasm.lib.nexusoperation.proto.v1.StartNexusOperationRequest\x1aN.temporal.server.chasm.lib.nexusoperation.proto.v1.StartNexusOperationResponse\")\x92\xc4\x03\x1f\x1a\x1dfrontend_request.operation_id\x8a\xb5\x18\x02\b\x01\x12\xe8\x01\n" +
-	"\x16DescribeNexusOperation\x12P.temporal.server.chasm.lib.nexusoperation.proto.v1.DescribeNexusOperationRequest\x1aQ.temporal.server.chasm.lib.nexusoperation.proto.v1.DescribeNexusOperationResponse\")\x92\xc4\x03\x1f\x1a\x1dfrontend_request.operation_id\x8a\xb5\x18\x02\b\x01BVZTgo.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb;nexusoperationpbb\x06proto3"
+	"\x16DescribeNexusOperation\x12P.temporal.server.chasm.lib.nexusoperation.proto.v1.DescribeNexusOperationRequest\x1aQ.temporal.server.chasm.lib.nexusoperation.proto.v1.DescribeNexusOperationResponse\")\x92\xc4\x03\x1f\x1a\x1dfrontend_request.operation_id\x8a\xb5\x18\x02\b\x01\x12\xe2\x01\n" +
+	"\x14DeleteNexusOperation\x12N.temporal.server.chasm.lib.nexusoperation.proto.v1.DeleteNexusOperationRequest\x1aO.temporal.server.chasm.lib.nexusoperation.proto.v1.DeleteNexusOperationResponse\")\x92\xc4\x03\x1f\x1a\x1dfrontend_request.operation_id\x8a\xb5\x18\x02\b\x01BVZTgo.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb;nexusoperationpbb\x06proto3"
 
 var file_temporal_server_chasm_lib_nexusoperation_proto_v1_service_proto_goTypes = []any{
 	(*StartNexusOperationRequest)(nil),     // 0: temporal.server.chasm.lib.nexusoperation.proto.v1.StartNexusOperationRequest
 	(*DescribeNexusOperationRequest)(nil),  // 1: temporal.server.chasm.lib.nexusoperation.proto.v1.DescribeNexusOperationRequest
-	(*StartNexusOperationResponse)(nil),    // 2: temporal.server.chasm.lib.nexusoperation.proto.v1.StartNexusOperationResponse
-	(*DescribeNexusOperationResponse)(nil), // 3: temporal.server.chasm.lib.nexusoperation.proto.v1.DescribeNexusOperationResponse
+	(*DeleteNexusOperationRequest)(nil),    // 2: temporal.server.chasm.lib.nexusoperation.proto.v1.DeleteNexusOperationRequest
+	(*StartNexusOperationResponse)(nil),    // 3: temporal.server.chasm.lib.nexusoperation.proto.v1.StartNexusOperationResponse
+	(*DescribeNexusOperationResponse)(nil), // 4: temporal.server.chasm.lib.nexusoperation.proto.v1.DescribeNexusOperationResponse
+	(*DeleteNexusOperationResponse)(nil),   // 5: temporal.server.chasm.lib.nexusoperation.proto.v1.DeleteNexusOperationResponse
 }
 var file_temporal_server_chasm_lib_nexusoperation_proto_v1_service_proto_depIdxs = []int32{
 	0, // 0: temporal.server.chasm.lib.nexusoperation.proto.v1.NexusOperationService.StartNexusOperation:input_type -> temporal.server.chasm.lib.nexusoperation.proto.v1.StartNexusOperationRequest
 	1, // 1: temporal.server.chasm.lib.nexusoperation.proto.v1.NexusOperationService.DescribeNexusOperation:input_type -> temporal.server.chasm.lib.nexusoperation.proto.v1.DescribeNexusOperationRequest
-	2, // 2: temporal.server.chasm.lib.nexusoperation.proto.v1.NexusOperationService.StartNexusOperation:output_type -> temporal.server.chasm.lib.nexusoperation.proto.v1.StartNexusOperationResponse
-	3, // 3: temporal.server.chasm.lib.nexusoperation.proto.v1.NexusOperationService.DescribeNexusOperation:output_type -> temporal.server.chasm.lib.nexusoperation.proto.v1.DescribeNexusOperationResponse
-	2, // [2:4] is the sub-list for method output_type
-	0, // [0:2] is the sub-list for method input_type
+	2, // 2: temporal.server.chasm.lib.nexusoperation.proto.v1.NexusOperationService.DeleteNexusOperation:input_type -> temporal.server.chasm.lib.nexusoperation.proto.v1.DeleteNexusOperationRequest
+	3, // 3: temporal.server.chasm.lib.nexusoperation.proto.v1.NexusOperationService.StartNexusOperation:output_type -> temporal.server.chasm.lib.nexusoperation.proto.v1.StartNexusOperationResponse
+	4, // 4: temporal.server.chasm.lib.nexusoperation.proto.v1.NexusOperationService.DescribeNexusOperation:output_type -> temporal.server.chasm.lib.nexusoperation.proto.v1.DescribeNexusOperationResponse
+	5, // 5: temporal.server.chasm.lib.nexusoperation.proto.v1.NexusOperationService.DeleteNexusOperation:output_type -> temporal.server.chasm.lib.nexusoperation.proto.v1.DeleteNexusOperationResponse
+	3, // [3:6] is the sub-list for method output_type
+	0, // [0:3] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name

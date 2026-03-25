@@ -215,6 +215,94 @@ func (x *DescribeNexusOperationResponse) GetFrontendResponse() *v1.DescribeNexus
 	return nil
 }
 
+type DeleteNexusOperationRequest struct {
+	state           protoimpl.MessageState                   `protogen:"open.v1"`
+	NamespaceId     string                                   `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	FrontendRequest *v1.DeleteNexusOperationExecutionRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *DeleteNexusOperationRequest) Reset() {
+	*x = DeleteNexusOperationRequest{}
+	mi := &file_temporal_server_chasm_lib_nexusoperation_proto_v1_request_response_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteNexusOperationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteNexusOperationRequest) ProtoMessage() {}
+
+func (x *DeleteNexusOperationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_nexusoperation_proto_v1_request_response_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteNexusOperationRequest.ProtoReflect.Descriptor instead.
+func (*DeleteNexusOperationRequest) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_nexusoperation_proto_v1_request_response_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *DeleteNexusOperationRequest) GetNamespaceId() string {
+	if x != nil {
+		return x.NamespaceId
+	}
+	return ""
+}
+
+func (x *DeleteNexusOperationRequest) GetFrontendRequest() *v1.DeleteNexusOperationExecutionRequest {
+	if x != nil {
+		return x.FrontendRequest
+	}
+	return nil
+}
+
+type DeleteNexusOperationResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteNexusOperationResponse) Reset() {
+	*x = DeleteNexusOperationResponse{}
+	mi := &file_temporal_server_chasm_lib_nexusoperation_proto_v1_request_response_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteNexusOperationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteNexusOperationResponse) ProtoMessage() {}
+
+func (x *DeleteNexusOperationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_nexusoperation_proto_v1_request_response_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteNexusOperationResponse.ProtoReflect.Descriptor instead.
+func (*DeleteNexusOperationResponse) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_nexusoperation_proto_v1_request_response_proto_rawDescGZIP(), []int{5}
+}
+
 var File_temporal_server_chasm_lib_nexusoperation_proto_v1_request_response_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_nexusoperation_proto_v1_request_response_proto_rawDesc = "" +
@@ -229,7 +317,11 @@ const file_temporal_server_chasm_lib_nexusoperation_proto_v1_request_response_pr
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12r\n" +
 	"\x10frontend_request\x18\x02 \x01(\v2G.temporal.api.workflowservice.v1.DescribeNexusOperationExecutionRequestR\x0ffrontendRequest\"\x97\x01\n" +
 	"\x1eDescribeNexusOperationResponse\x12u\n" +
-	"\x11frontend_response\x18\x01 \x01(\v2H.temporal.api.workflowservice.v1.DescribeNexusOperationExecutionResponseR\x10frontendResponseBVZTgo.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb;nexusoperationpbb\x06proto3"
+	"\x11frontend_response\x18\x01 \x01(\v2H.temporal.api.workflowservice.v1.DescribeNexusOperationExecutionResponseR\x10frontendResponse\"\xb2\x01\n" +
+	"\x1bDeleteNexusOperationRequest\x12!\n" +
+	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12p\n" +
+	"\x10frontend_request\x18\x02 \x01(\v2E.temporal.api.workflowservice.v1.DeleteNexusOperationExecutionRequestR\x0ffrontendRequest\"\x1e\n" +
+	"\x1cDeleteNexusOperationResponseBVZTgo.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb;nexusoperationpbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_nexusoperation_proto_v1_request_response_proto_rawDescOnce sync.Once
@@ -243,27 +335,31 @@ func file_temporal_server_chasm_lib_nexusoperation_proto_v1_request_response_pro
 	return file_temporal_server_chasm_lib_nexusoperation_proto_v1_request_response_proto_rawDescData
 }
 
-var file_temporal_server_chasm_lib_nexusoperation_proto_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_temporal_server_chasm_lib_nexusoperation_proto_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_temporal_server_chasm_lib_nexusoperation_proto_v1_request_response_proto_goTypes = []any{
 	(*StartNexusOperationRequest)(nil),                 // 0: temporal.server.chasm.lib.nexusoperation.proto.v1.StartNexusOperationRequest
 	(*StartNexusOperationResponse)(nil),                // 1: temporal.server.chasm.lib.nexusoperation.proto.v1.StartNexusOperationResponse
 	(*DescribeNexusOperationRequest)(nil),              // 2: temporal.server.chasm.lib.nexusoperation.proto.v1.DescribeNexusOperationRequest
 	(*DescribeNexusOperationResponse)(nil),             // 3: temporal.server.chasm.lib.nexusoperation.proto.v1.DescribeNexusOperationResponse
-	(*v1.StartNexusOperationExecutionRequest)(nil),     // 4: temporal.api.workflowservice.v1.StartNexusOperationExecutionRequest
-	(*v1.StartNexusOperationExecutionResponse)(nil),    // 5: temporal.api.workflowservice.v1.StartNexusOperationExecutionResponse
-	(*v1.DescribeNexusOperationExecutionRequest)(nil),  // 6: temporal.api.workflowservice.v1.DescribeNexusOperationExecutionRequest
-	(*v1.DescribeNexusOperationExecutionResponse)(nil), // 7: temporal.api.workflowservice.v1.DescribeNexusOperationExecutionResponse
+	(*DeleteNexusOperationRequest)(nil),                // 4: temporal.server.chasm.lib.nexusoperation.proto.v1.DeleteNexusOperationRequest
+	(*DeleteNexusOperationResponse)(nil),               // 5: temporal.server.chasm.lib.nexusoperation.proto.v1.DeleteNexusOperationResponse
+	(*v1.StartNexusOperationExecutionRequest)(nil),     // 6: temporal.api.workflowservice.v1.StartNexusOperationExecutionRequest
+	(*v1.StartNexusOperationExecutionResponse)(nil),    // 7: temporal.api.workflowservice.v1.StartNexusOperationExecutionResponse
+	(*v1.DescribeNexusOperationExecutionRequest)(nil),  // 8: temporal.api.workflowservice.v1.DescribeNexusOperationExecutionRequest
+	(*v1.DescribeNexusOperationExecutionResponse)(nil), // 9: temporal.api.workflowservice.v1.DescribeNexusOperationExecutionResponse
+	(*v1.DeleteNexusOperationExecutionRequest)(nil),    // 10: temporal.api.workflowservice.v1.DeleteNexusOperationExecutionRequest
 }
 var file_temporal_server_chasm_lib_nexusoperation_proto_v1_request_response_proto_depIdxs = []int32{
-	4, // 0: temporal.server.chasm.lib.nexusoperation.proto.v1.StartNexusOperationRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.StartNexusOperationExecutionRequest
-	5, // 1: temporal.server.chasm.lib.nexusoperation.proto.v1.StartNexusOperationResponse.frontend_response:type_name -> temporal.api.workflowservice.v1.StartNexusOperationExecutionResponse
-	6, // 2: temporal.server.chasm.lib.nexusoperation.proto.v1.DescribeNexusOperationRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.DescribeNexusOperationExecutionRequest
-	7, // 3: temporal.server.chasm.lib.nexusoperation.proto.v1.DescribeNexusOperationResponse.frontend_response:type_name -> temporal.api.workflowservice.v1.DescribeNexusOperationExecutionResponse
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	6,  // 0: temporal.server.chasm.lib.nexusoperation.proto.v1.StartNexusOperationRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.StartNexusOperationExecutionRequest
+	7,  // 1: temporal.server.chasm.lib.nexusoperation.proto.v1.StartNexusOperationResponse.frontend_response:type_name -> temporal.api.workflowservice.v1.StartNexusOperationExecutionResponse
+	8,  // 2: temporal.server.chasm.lib.nexusoperation.proto.v1.DescribeNexusOperationRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.DescribeNexusOperationExecutionRequest
+	9,  // 3: temporal.server.chasm.lib.nexusoperation.proto.v1.DescribeNexusOperationResponse.frontend_response:type_name -> temporal.api.workflowservice.v1.DescribeNexusOperationExecutionResponse
+	10, // 4: temporal.server.chasm.lib.nexusoperation.proto.v1.DeleteNexusOperationRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.DeleteNexusOperationExecutionRequest
+	5,  // [5:5] is the sub-list for method output_type
+	5,  // [5:5] is the sub-list for method input_type
+	5,  // [5:5] is the sub-list for extension type_name
+	5,  // [5:5] is the sub-list for extension extendee
+	0,  // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_nexusoperation_proto_v1_request_response_proto_init() }
@@ -277,7 +373,7 @@ func file_temporal_server_chasm_lib_nexusoperation_proto_v1_request_response_pro
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_nexusoperation_proto_v1_request_response_proto_rawDesc), len(file_temporal_server_chasm_lib_nexusoperation_proto_v1_request_response_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

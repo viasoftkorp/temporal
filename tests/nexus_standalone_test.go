@@ -2,6 +2,7 @@ package tests
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/tests/testcore"
@@ -570,6 +572,136 @@ func TestStandaloneNexusOperationCount(t *testing.T) {
 		s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 		s.ErrorContains(err, "'GROUP BY' clause is only supported for ExecutionStatus")
 	})
+}
+
+var nexusDefaultMaxIDLengthLimit = dynamicconfig.MaxIDLengthLimit.Get(
+	dynamicconfig.NewCollection(dynamicconfig.StaticClient(nil), log.NewNoopLogger()))()
+
+func TestStandaloneNexusOperationDelete(t *testing.T) {
+	t.Parallel()
+
+	t.Run("DeleteScheduledOperation", func(t *testing.T) {
+		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+		endpointName := createNexusEndpoint(s)
+
+		operationID := testcore.RandomizeStr(t.Name())
+		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: operationID,
+			Endpoint:    endpointName,
+		})
+		require.NoError(t, err)
+		runID := startResp.RunId
+
+		_, err = s.FrontendClient().DeleteNexusOperationExecution(s.Context(), &workflowservice.DeleteNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: operationID,
+			RunId:       runID,
+		})
+		require.NoError(t, err)
+
+		eventuallyNexusOperationDeleted(s, t, operationID, runID)
+	})
+
+	t.Run("DeleteOperationNoRunID", func(t *testing.T) {
+		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+		endpointName := createNexusEndpoint(s)
+
+		operationID := testcore.RandomizeStr(t.Name())
+		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: operationID,
+			Endpoint:    endpointName,
+		})
+		require.NoError(t, err)
+		runID := startResp.RunId
+
+		_, err = s.FrontendClient().DeleteNexusOperationExecution(s.Context(), &workflowservice.DeleteNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: operationID,
+		})
+		require.NoError(t, err)
+
+		eventuallyNexusOperationDeleted(s, t, operationID, runID)
+	})
+
+	t.Run("DeleteNonExistent", func(t *testing.T) {
+		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+
+		_, err := s.FrontendClient().DeleteNexusOperationExecution(s.Context(), &workflowservice.DeleteNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "does-not-exist",
+		})
+		var notFound *serviceerror.NotFound
+		require.ErrorAs(t, err, &notFound)
+	})
+
+	t.Run("DeleteAlreadyDeleted", func(t *testing.T) {
+		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+		endpointName := createNexusEndpoint(s)
+
+		operationID := testcore.RandomizeStr(t.Name())
+		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: operationID,
+			Endpoint:    endpointName,
+		})
+		require.NoError(t, err)
+		runID := startResp.RunId
+
+		_, err = s.FrontendClient().DeleteNexusOperationExecution(s.Context(), &workflowservice.DeleteNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: operationID,
+			RunId:       runID,
+		})
+		require.NoError(t, err)
+
+		eventuallyNexusOperationDeleted(s, t, operationID, runID)
+
+		_, err = s.FrontendClient().DeleteNexusOperationExecution(s.Context(), &workflowservice.DeleteNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: operationID,
+			RunId:       runID,
+		})
+		var notFound *serviceerror.NotFound
+		require.ErrorAs(t, err, &notFound)
+	})
+
+	// Validates that request validation is wired up in the frontend.
+	// Exhaustive validation cases are covered in unit tests.
+	t.Run("DeleteValidation", func(t *testing.T) {
+		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+
+		t.Run("EmptyOperationID", func(t *testing.T) {
+			_, err := s.FrontendClient().DeleteNexusOperationExecution(s.Context(), &workflowservice.DeleteNexusOperationExecutionRequest{
+				Namespace: s.Namespace().String(),
+			})
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Equal(t, "operation_id is required", invalidArgErr.Message)
+		})
+
+		t.Run("OperationIDTooLong", func(t *testing.T) {
+			_, err := s.FrontendClient().DeleteNexusOperationExecution(s.Context(), &workflowservice.DeleteNexusOperationExecutionRequest{
+				Namespace:   s.Namespace().String(),
+				OperationId: string(make([]byte, nexusDefaultMaxIDLengthLimit+1)),
+			})
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Equal(t, fmt.Sprintf("operation_id exceeds length limit. Length=%d Limit=%d",
+				nexusDefaultMaxIDLengthLimit+1, nexusDefaultMaxIDLengthLimit), invalidArgErr.Message)
+		})
+	})
+}
+
+func eventuallyNexusOperationDeleted(s *testcore.TestEnv, t *testing.T, operationID, runID string) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		_, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: operationID,
+			RunId:       runID,
+		})
+		var notFoundErr *serviceerror.NotFound
+		return errors.As(err, &notFoundErr)
+	}, 5*time.Second, 100*time.Millisecond)
 }
 
 func startNexusOperation(
