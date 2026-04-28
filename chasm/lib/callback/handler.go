@@ -33,14 +33,7 @@ func (h *callbackExecutionHandler) StartCallbackExecution(
 	ctx context.Context,
 	req *callbackspb.StartCallbackExecutionRequest,
 ) (resp *callbackspb.StartCallbackExecutionResponse, err error) {
-	// TODO(chrsmith): Unresolved comment.
-	// Roey: Not needed, we already do this in an interceptor. Please get rid of all of these calls.
-	// Quinn: I see we had them in chasm/lib/schedule/handler.go are they incorrect there as well?
-	// Roey: Yes, probably predate the interceptor.
-	defer log.CapturePanic(h.logger, &err)
-
 	frontendReq := req.FrontendRequest
-
 	input := &StartCallbackExecutionInput{
 		CallbackID:             frontendReq.GetCallbackId(),
 		RequestID:              frontendReq.GetRequestId(),
@@ -67,37 +60,27 @@ func (h *callbackExecutionHandler) StartCallbackExecution(
 		input.FailureCompletion = completion.GetFailure()
 	}
 
-	// TODO(chrsmith): Unresolved comment.
-	/**
-	FYI this will start with the following:
-
-	ReusePolicy:    chasm.BusinessIDReusePolicyAllowDuplicate,
-	ConflictPolicy: chasm.BusinessIDConflictPolicyFail,
-	It's what we want but maybe call it out in a comment here given that we don't expose any of these options via the API.
-
-	> I think that is what we want no?
-
-	Yeah, but I would make it explicit or put a comment.
-	*/
 	result, err := chasm.StartExecution(
 		ctx,
 		chasm.ExecutionKey{
 			NamespaceID: req.NamespaceId,
 			BusinessID:  frontendReq.GetCallbackId(),
 		},
-		// TODO(chrsmith): Unresolved comment.
-		// > nit: this function shouldn't be exposed if it's not called outside of this package.
-		// Is there a reason why NewStandaloneActivity is public? Was patterning after that.
-		// > Probably because I didn't catch it before...
-		CreateCallbackExecution,
+		createCallbackExecution,
 		input,
 		chasm.WithRequestID(frontendReq.GetRequestId()),
+		// Relying on these default policies, as no configuration knobs are
+		// exposed to end users.
+		chasm.WithBusinessIDPolicy(
+			chasm.BusinessIDReusePolicyAllowDuplicate,
+			chasm.BusinessIDConflictPolicyFail,
+		),
 	)
 
 	var alreadyStartedErr *chasm.ExecutionAlreadyStartedError
 	if errors.As(err, &alreadyStartedErr) {
-		// TODO(chrsmith): Unresolved comment.
-		// You should define a serviceerror.CallbackExecutionAlreadyStarted if you haven't already and use it here.
+		// TODO(chrsmith): You should define a serviceerror.CallbackExecutionAlreadyStarted if you haven't already and use it here.
+		// TODO: WIP, err := serviceerror.NewCallbackExecutionAlreadyStarted("callback execution already started", frontendReq.GetCallbackId())
 		st := status.New(codes.AlreadyExists, fmt.Sprintf("callback execution %q already exists", frontendReq.GetCallbackId()))
 		st, _ = st.WithDetails(&errordetails.CallbackExecutionAlreadyStartedFailure{
 			StartRequestId: alreadyStartedErr.CurrentRequestID,
@@ -123,6 +106,7 @@ func (h *callbackExecutionHandler) DescribeCallbackExecution(
 	defer log.CapturePanic(h.logger, &err)
 
 	// TODO(chrsmith): You need to also implement the long poll version of this.
+	// 	See https://temporaltechnologies.slack.com/archives/D0AUGEPP7U1/p1777418231095779?thread_ts=1777417808.690789&cid=D0AUGEPP7U1
 	resp, err = chasm.ReadComponent(
 		ctx,
 		chasm.NewComponentRef[*CallbackExecution](

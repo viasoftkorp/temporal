@@ -66,9 +66,9 @@ type StartCallbackExecutionInput struct {
 	SearchAttributes       map[string]*commonpb.Payload
 }
 
-// CreateCallbackExecution constructs a new CallbackExecution entity with a child Callback.
+// createCallbackExecution constructs a new CallbackExecution entity with a child Callback.
 // The child Callback is immediately transitioned to SCHEDULED state to begin invocation.
-func CreateCallbackExecution(
+func createCallbackExecution(
 	ctx chasm.MutableContext,
 	input *StartCallbackExecutionInput,
 ) (*CallbackExecution, error) {
