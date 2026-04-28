@@ -68,6 +68,7 @@ func (c invocableInternal) Invoke(
 			// > the Nexus SPEC.md. I was hoping we would do that as part of this change. It's just a bit tricky
 			// > since you'll have to send both headers for a while for compatibility but on the handler side, we
 			// > can remove the duplication if we can read from the new header.
+			// ^-- updating the documentation that the Nexus RFC to refer to the token.
 			encodedRef = header.Get(commonnexus.CallbackTokenHeader)
 		}
 	}

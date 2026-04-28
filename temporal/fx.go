@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	chasmcallback "go.temporal.io/server/chasm/lib/callback"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
@@ -154,9 +155,7 @@ var (
 	ChasmLibraryOptions = fx.Options(
 		chasm.Module,
 		chasmscheduler.Module,
-		// TODO(chrsmith): This gets included in the frontend, meaning the callback library
-		//	 gets registered twice. That's not great.
-		// chasmcallback.Module,
+		chasmcallback.Module,
 	)
 )
 
