@@ -237,6 +237,7 @@ type Config struct {
 
 	// CHASM archetypes
 	Activity *activity.Config
+	// TODO(chrsmith): I'm guessing the callback config needs to be wired up here, too?
 }
 
 // IsExperimentAllowed checks if an experiment is enabled for a given namespace in the dynamic config.

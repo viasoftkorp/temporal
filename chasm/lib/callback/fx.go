@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"go.temporal.io/server/chasm"
+	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
@@ -14,13 +15,6 @@ import (
 	queuescommon "go.temporal.io/server/service/history/queues/common"
 	"go.uber.org/fx"
 )
-
-func register(
-	registry *chasm.Registry,
-	library *Library,
-) error {
-	return registry.Register(library)
-}
 
 // httpCallerProviderProvider provides an HTTPCallerProvider for CHASM callbacks.
 func httpCallerProviderProvider(
@@ -53,12 +47,30 @@ func httpCallerProviderProvider(
 	return m.Get, nil
 }
 
+// TODO(chrsmith): https://github.com/temporalio/temporal/pull/9805/changes#r3105970750
+// > You'll need to also split the library as we've done for SAA. Visibility needs
+// > the registered components in order to figure out the CHASM aliases.
+// ---
+// Wiring some of the newly added API endpoints to `callback/library.go`...
+var FrontendModule = fx.Module(
+	"callback-frontend",
+	fx.Provide(callbackspb.NewCallbackExecutionServiceLayeredClient),
+	fx.Provide(NewCallbackExecutionFrontendHandler),
+)
+
 var Module = fx.Module(
 	"chasm.lib.callback",
 	fx.Provide(configProvider),
 	fx.Provide(httpCallerProviderProvider),
 	fx.Provide(newInvocationTaskHandler),
 	fx.Provide(newBackoffTaskHandler),
+	fx.Provide(newCallbackExecutionHandler),
 	fx.Provide(newLibrary),
-	fx.Invoke(register),
+
+	fx.Provide(NewScheduleToCloseTimeoutTaskHandler),
+
+	// Register the Callback CHASM component on startup.
+	fx.Invoke(func(registry *chasm.Registry, library *Library) error {
+		return registry.Register(library)
+	}),
 )

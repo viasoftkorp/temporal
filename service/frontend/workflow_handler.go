@@ -119,6 +119,8 @@ type (
 	WorkflowHandler struct {
 		workflowservice.UnsafeWorkflowServiceServer
 		ActivityHandler
+		// TODO(chrsmith): Should rename to FrontendHandler for consistency?
+		callback.CallbackExecutionFrontendHandler
 		NexusOperationHandler
 
 		status int32
@@ -315,6 +317,8 @@ func NewWorkflowHandler(
 	matchingClient matchingservice.MatchingServiceClient,
 	workerDeploymentClient workerdeployment.Client,
 	schedulerClient schedulerpb.SchedulerServiceClient,
+	// TODO(chrsmith): Implement stuff?
+	callbackExecutionFrontendHandler callback.CallbackExecutionFrontendHandler,
 	archiverProvider provider.ArchiverProvider,
 	payloadSerializer serialization.Serializer,
 	namespaceRegistry namespace.Registry,
@@ -363,11 +367,13 @@ func NewWorkflowHandler(
 		matchingClient:                  matchingClient,
 		workerDeploymentClient:          workerDeploymentClient,
 		schedulerClient:                 schedulerClient,
-		archiverProvider:                archiverProvider,
-		payloadSerializer:               payloadSerializer,
-		namespaceRegistry:               namespaceRegistry,
-		saProvider:                      saProvider,
-		saMapperProvider:                saMapperProvider,
+		// TODO(chrsmith): Naming consistency, etc.
+		CallbackExecutionFrontendHandler: callbackExecutionFrontendHandler,
+		archiverProvider:                 archiverProvider,
+		payloadSerializer:                payloadSerializer,
+		namespaceRegistry:                namespaceRegistry,
+		saProvider:                       saProvider,
+		saMapperProvider:                 saMapperProvider,
 		saValidator: searchattribute.NewValidator(
 			saProvider,
 			saMapperProvider,

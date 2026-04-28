@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
@@ -37,7 +38,7 @@ var TransitionRescheduled = chasm.NewTransition(
 	callbackspb.CALLBACK_STATUS_SCHEDULED,
 	func(cb *Callback, ctx chasm.MutableContext, event EventRescheduled) error {
 		cb.NextAttemptScheduleTime = nil
-		u, err := url.Parse(cb.Callback.GetNexus().Url)
+		u, err := url.Parse(cb.Callback.GetNexus().GetUrl())
 		if err != nil {
 			return fmt.Errorf("failed to parse URL: %v: %w", cb.Callback, err)
 		}
@@ -62,6 +63,13 @@ var TransitionAttemptFailed = chasm.NewTransition(
 	callbackspb.CALLBACK_STATUS_BACKING_OFF,
 	func(cb *Callback, ctx chasm.MutableContext, event EventAttemptFailed) error {
 		cb.recordAttempt(event.Time)
+		// TODO(chrsmith): Unresolved comment.
+		// > I realized now that this was copied from the HSM version but there was no need to inject time into this function.
+		// > You can just use ctx.Now(cb). Would you mind switching to that while you're modifying these files?
+		// ...
+		// > Quinn: Should recordAttempt  also take ctx.Now(cb)?
+		// > Yes.
+		cb.CloseTime = timestamppb.New(event.Time)
 		// Use 0 for elapsed time as we don't limit the retry by time (for now).
 		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(cb.Attempt), event.Err)
 		nextAttemptScheduleTime := event.Time.Add(nextDelay)
@@ -117,6 +125,56 @@ var TransitionSucceeded = chasm.NewTransition(
 	func(cb *Callback, ctx chasm.MutableContext, event EventSucceeded) error {
 		cb.recordAttempt(event.Time)
 		cb.LastAttemptFailure = nil
+		return nil
+	},
+)
+
+// EventTerminated is triggered when the callback is forcefully terminated.
+type EventTerminated struct {
+	Reason string
+}
+
+var TransitionTerminated = chasm.NewTransition(
+	[]callbackspb.CallbackStatus{
+		callbackspb.CALLBACK_STATUS_STANDBY,
+		callbackspb.CALLBACK_STATUS_SCHEDULED,
+		callbackspb.CALLBACK_STATUS_BACKING_OFF,
+	},
+	callbackspb.CALLBACK_STATUS_TERMINATED,
+	func(cb *Callback, ctx chasm.MutableContext, event EventTerminated) error {
+		cb.CloseTime = timestamppb.New(ctx.Now(cb))
+		reason := event.Reason
+		if reason == "" {
+			reason = "callback execution terminated"
+		}
+		cb.Failure = &failurepb.Failure{
+			Message:     reason,
+			FailureInfo: &failurepb.Failure_TerminatedFailureInfo{},
+		}
+		return nil
+	},
+)
+
+// EventTimedOut is triggered when the callback's schedule-to-close timeout fires.
+type EventTimedOut struct{}
+
+var TransitionTimedOut = chasm.NewTransition(
+	[]callbackspb.CallbackStatus{
+		callbackspb.CALLBACK_STATUS_STANDBY,
+		callbackspb.CALLBACK_STATUS_SCHEDULED,
+		callbackspb.CALLBACK_STATUS_BACKING_OFF,
+	},
+	callbackspb.CALLBACK_STATUS_FAILED,
+	func(cb *Callback, ctx chasm.MutableContext, event EventTimedOut) error {
+		cb.CloseTime = timestamppb.New(ctx.Now(cb))
+		cb.Failure = &failurepb.Failure{
+			Message: "callback execution timed out",
+			FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+				TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+					TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+				},
+			},
+		}
 		return nil
 	},
 )

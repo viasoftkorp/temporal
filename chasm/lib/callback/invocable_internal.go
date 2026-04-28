@@ -58,13 +58,19 @@ func (c invocableInternal) Invoke(
 	task *callbackspb.InvocationTask,
 	taskAttr chasm.TaskAttributes,
 ) invocationResult {
-	header := nexus.Header(c.callback.GetHeader())
-	if header == nil {
-		header = nexus.Header{}
+	// Get the token from the dedicated Token field, falling back to the header for backward compatibility.
+	encodedRef := c.callback.GetToken()
+	if encodedRef == "" {
+		header := nexus.Header(c.callback.GetHeader())
+		if header != nil {
+			// TODO(chrsmith): Unresolved comment.
+			// > Roey: I would ideally want to make the callback token header something generic that we can put in
+			// > the Nexus SPEC.md. I was hoping we would do that as part of this change. It's just a bit tricky
+			// > since you'll have to send both headers for a while for compatibility but on the handler side, we
+			// > can remove the duplication if we can read from the new header.
+			encodedRef = header.Get(commonnexus.CallbackTokenHeader)
+		}
 	}
-
-	// Get back the base64-encoded ComponentRef from the header.
-	encodedRef := header.Get(commonnexus.CallbackTokenHeader)
 	if encodedRef == "" {
 		return invocationResultFail{logInternalError(h.logger, "callback missing token", nil)}
 	}
