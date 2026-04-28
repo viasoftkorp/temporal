@@ -3,6 +3,7 @@ package testcore
 import (
 	"context"
 	_ "embed"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -19,6 +20,7 @@ import (
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/api/adminservice/v1"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -66,13 +68,14 @@ type TestEnv struct {
 
 	Logger log.Logger
 
-	cluster    *TestCluster
-	nsName     namespace.Name
-	nsID       namespace.ID
-	taskPoller *taskpoller.TaskPoller
-	t          *testing.T
-	tv         *testvars.TestVars
-	ctx        context.Context
+	cluster        *TestCluster
+	nsName         namespace.Name
+	nsID           namespace.ID
+	taskPoller     *taskpoller.TaskPoller
+	t              *testing.T
+	tv             *testvars.TestVars
+	ctx            context.Context
+	dedicatedGuard *dedicatedClusterGuard
 
 	sdkClientOnce sync.Once
 	sdkClient     sdkclient.Client
@@ -143,12 +146,16 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	for _, opt := range opts {
 		opt(&options)
 	}
+	dedicatedGuard := newDedicatedClusterGuard(options.dedicatedCluster)
 
 	// For dedicated clusters, pass all dynamic config settings at cluster creation.
 	var startupConfig map[dynamicconfig.Key]any
 	if options.dedicatedCluster && len(options.dynamicConfigSettings) > 0 {
 		startupConfig = make(map[dynamicconfig.Key]any, len(options.dynamicConfigSettings))
 		for _, override := range options.dynamicConfigSettings {
+			if !canBeNamespaceScoped(override.setting.Precedence()) {
+				dedicatedGuard.record("global dynamic config used")
+			}
 			startupConfig[override.setting.Key()] = override.value
 		}
 	}
@@ -183,7 +190,13 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		tv:                 testvars.New(t),
 		ctx:                setupTestTimeoutWithContext(t, options.timeout),
 		sdkWorkerTQ:        RandomizeStr("tq-" + t.Name()),
+		dedicatedGuard:     dedicatedGuard,
 	}
+	t.Cleanup(func() {
+		if err := env.dedicatedGuard.validate(); err != nil && !t.Failed() {
+			t.Fatal(err)
+		}
+	})
 
 	// Set Nexus callback URL now that we have the cluster's HTTP address. Note that we set
 	// a default for the global config here so callers that rely on this can still use a shared cluster.
@@ -225,6 +238,7 @@ func (e *TestEnv) InjectHook(hook testhooks.Hook) (cleanup func()) {
 		if e.isShared {
 			e.t.Fatal("InjectHook: global hooks require a dedicated cluster; use testcore.WithDedicatedCluster()")
 		}
+		e.dedicatedGuard.record("global hook injected")
 		scope = testhooks.GlobalScope
 	default:
 		e.t.Fatalf("InjectHook: unknown scope %v", hook.Scope())
@@ -350,6 +364,8 @@ func (e *TestEnv) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, va
 				Value:       value,
 			}}
 		}
+	} else if !canBeNamespaceScoped(setting.Precedence()) {
+		e.dedicatedGuard.record("global dynamic config used")
 	}
 	return e.cluster.host.overrideDynamicConfigForTest(e.t, setting.Key(), value)
 }
@@ -361,6 +377,7 @@ func (e *TestEnv) StartGlobalMetricCapture() *GlobalMetricCapture {
 	if e.isShared {
 		e.t.Fatal("StartGlobalMetricCapture cannot be called on a shared cluster; use testcore.WithDedicatedCluster()")
 	}
+	e.dedicatedGuard.record("global metric capture") // note that globalCapture has its own misuse detection
 
 	handler := e.cluster.host.CaptureMetricsHandler()
 	if handler == nil {
@@ -397,6 +414,20 @@ func (e *TestEnv) StartNamespaceMetricCaptureFor(namespaceName string) *Namespac
 	return newNamespaceMetricCapture(capture, namespaceName)
 }
 
+// CloseShard closes the shard that contains the given workflow.
+// This is a cluster-global operation and cannot be called on shared clusters.
+func (e *TestEnv) CloseShard(namespaceID string, workflowID string) {
+	if e.isShared {
+		e.t.Fatalf("CloseShard cannot be called on a shared cluster; use testcore.WithDedicatedCluster()")
+	}
+	e.dedicatedGuard.record("shard closed")
+	shardID := common.WorkflowIDToHistoryShard(namespaceID, workflowID, e.testClusterConfig.HistoryConfig.NumHistoryShards)
+	_, err := e.AdminClient().CloseShard(NewContext(), &adminservice.CloseShardRequest{
+		ShardId: shardID,
+	})
+	e.NoError(err)
+}
+
 func canBeNamespaceScoped(p dynamicconfig.Precedence) bool {
 	switch p {
 	case dynamicconfig.PrecedenceNamespace,
@@ -431,4 +462,40 @@ func checkTestShard(t *testing.T) {
 		t.Skipf("Skipping %s in test shard %d/%d (it runs in %d)", t.Name(), index+1, total, testIndex+1)
 	}
 	t.Logf("Running %s in test shard %d/%d", t.Name(), index+1, total)
+}
+
+type dedicatedClusterGuard struct {
+	required    bool
+	mu          sync.Mutex
+	usageReason string
+}
+
+func newDedicatedClusterGuard(required bool) *dedicatedClusterGuard {
+	return &dedicatedClusterGuard{required: required}
+}
+
+// record marks that a dedicated-cluster-only feature was used, satisfying the guard.
+func (u *dedicatedClusterGuard) record(reason string) {
+	if !u.required {
+		return
+	}
+	u.mu.Lock()
+	if u.usageReason == "" {
+		u.usageReason = reason
+	}
+	u.mu.Unlock()
+}
+
+// validate checks that the guard was satisfied i.e. a dedicated-cluster-only feature was used.
+func (u *dedicatedClusterGuard) validate() error {
+	if !u.required {
+		return nil
+	}
+	u.mu.Lock()
+	usageReason := u.usageReason
+	u.mu.Unlock()
+	if usageReason == "" {
+		return errors.New("testcore.WithDedicatedCluster() was requested but no dedicated-cluster-only feature was used")
+	}
+	return nil
 }
