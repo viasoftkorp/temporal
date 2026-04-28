@@ -30,6 +30,8 @@ func TestValidTransitions(t *testing.T) {
 
 	// AttemptFailed
 	mctx := &chasm.MockMutableContext{}
+	mctx.HandleNow = func(chasm.Component) time.Time { return currentTime }
+
 	err := TransitionAttemptFailed.Apply(callback, mctx, EventAttemptFailed{
 		Time:        currentTime,
 		Err:         errors.New("test"),
@@ -52,6 +54,8 @@ func TestValidTransitions(t *testing.T) {
 
 	// Rescheduled
 	mctx = &chasm.MockMutableContext{}
+	mctx.HandleNow = func(chasm.Component) time.Time { return currentTime }
+
 	err = TransitionRescheduled.Apply(callback, mctx, EventRescheduled{})
 	require.NoError(t, err)
 
@@ -76,6 +80,8 @@ func TestValidTransitions(t *testing.T) {
 	// Succeeded
 	currentTime = currentTime.Add(time.Second)
 	mctx = &chasm.MockMutableContext{}
+	mctx.HandleNow = func(chasm.Component) time.Time { return currentTime }
+
 	err = TransitionSucceeded.Apply(callback, mctx, EventSucceeded{Time: currentTime})
 	require.NoError(t, err)
 
@@ -96,6 +102,8 @@ func TestValidTransitions(t *testing.T) {
 
 	// failed
 	mctx = &chasm.MockMutableContext{}
+	mctx.HandleNow = func(chasm.Component) time.Time { return currentTime }
+
 	err = TransitionFailed.Apply(callback, mctx, EventFailed{Time: currentTime, Err: errors.New("failed")})
 	require.NoError(t, err)
 

@@ -62,14 +62,11 @@ var TransitionAttemptFailed = chasm.NewTransition(
 	[]callbackspb.CallbackStatus{callbackspb.CALLBACK_STATUS_SCHEDULED},
 	callbackspb.CALLBACK_STATUS_BACKING_OFF,
 	func(cb *Callback, ctx chasm.MutableContext, event EventAttemptFailed) error {
-		cb.recordAttempt(event.Time)
-		// TODO(chrsmith): Unresolved comment.
-		// > I realized now that this was copied from the HSM version but there was no need to inject time into this function.
-		// > You can just use ctx.Now(cb). Would you mind switching to that while you're modifying these files?
-		// ...
-		// > Quinn: Should recordAttempt  also take ctx.Now(cb)?
-		// > Yes.
-		cb.CloseTime = timestamppb.New(event.Time)
+		// Record the event.
+		now := ctx.Now(cb)
+		cb.recordAttempt(now)
+		cb.CloseTime = timestamppb.New(now)
+
 		// Use 0 for elapsed time as we don't limit the retry by time (for now).
 		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(cb.Attempt), event.Err)
 		nextAttemptScheduleTime := event.Time.Add(nextDelay)
@@ -91,7 +88,7 @@ var TransitionAttemptFailed = chasm.NewTransition(
 	},
 )
 
-// EventFailed is triggered when an attempt is failed with a non retryable error.
+// EventFailed is triggered when an attempt is failed with a non-retryable error.
 type EventFailed struct {
 	Time time.Time
 	Err  error
@@ -101,7 +98,11 @@ var TransitionFailed = chasm.NewTransition(
 	[]callbackspb.CallbackStatus{callbackspb.CALLBACK_STATUS_SCHEDULED},
 	callbackspb.CALLBACK_STATUS_FAILED,
 	func(cb *Callback, ctx chasm.MutableContext, event EventFailed) error {
-		cb.recordAttempt(event.Time)
+		// Record the event.
+		now := ctx.Now(cb)
+		cb.recordAttempt(now)
+		cb.CloseTime = timestamppb.New(now)
+
 		cb.LastAttemptFailure = &failurepb.Failure{
 			Message: event.Err.Error(),
 			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
@@ -123,7 +124,8 @@ var TransitionSucceeded = chasm.NewTransition(
 	[]callbackspb.CallbackStatus{callbackspb.CALLBACK_STATUS_SCHEDULED},
 	callbackspb.CALLBACK_STATUS_SUCCEEDED,
 	func(cb *Callback, ctx chasm.MutableContext, event EventSucceeded) error {
-		cb.recordAttempt(event.Time)
+		now := ctx.Now(cb)
+		cb.recordAttempt(now)
 		cb.LastAttemptFailure = nil
 		return nil
 	},
@@ -142,11 +144,14 @@ var TransitionTerminated = chasm.NewTransition(
 	},
 	callbackspb.CALLBACK_STATUS_TERMINATED,
 	func(cb *Callback, ctx chasm.MutableContext, event EventTerminated) error {
-		cb.CloseTime = timestamppb.New(ctx.Now(cb))
+		now := ctx.Now(cb)
+		cb.CloseTime = timestamppb.New(now)
+
 		reason := event.Reason
 		if reason == "" {
 			reason = "callback execution terminated"
 		}
+
 		cb.Failure = &failurepb.Failure{
 			Message:     reason,
 			FailureInfo: &failurepb.Failure_TerminatedFailureInfo{},
@@ -166,7 +171,9 @@ var TransitionTimedOut = chasm.NewTransition(
 	},
 	callbackspb.CALLBACK_STATUS_FAILED,
 	func(cb *Callback, ctx chasm.MutableContext, event EventTimedOut) error {
-		cb.CloseTime = timestamppb.New(ctx.Now(cb))
+		now := ctx.Now(cb)
+		cb.CloseTime = timestamppb.New(now)
+
 		cb.Failure = &failurepb.Failure{
 			Message: "callback execution timed out",
 			FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
