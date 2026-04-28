@@ -23,6 +23,10 @@ var _ chasm.Component = (*Callback)(nil)
 var _ chasm.StateMachine[callbackspb.CallbackStatus] = (*Callback)(nil)
 
 // Callback represents a callback component in CHASM.
+//
+// Note that there is a separate CHASM component, CallbackExecution,
+// which ...
+// TODO(chrsmith): Explain the distinction between these two CHASM components.
 type Callback struct {
 	chasm.UnimplementedComponent
 

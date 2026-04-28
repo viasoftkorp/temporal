@@ -56,6 +56,12 @@ var FrontendModule = fx.Module(
 	"callback-frontend",
 	fx.Provide(callbackspb.NewCallbackExecutionServiceLayeredClient),
 	fx.Provide(NewFrontendHandler),
+
+	// Register only a slimmed-down library for the frontend.
+	fx.Provide(newComponentOnlyLibrary),
+	fx.Invoke(func(registry *chasm.Registry, coLibrary *componentOnlyLibrary) error {
+		return registry.Register(coLibrary)
+	}),
 )
 
 var Module = fx.Module(
@@ -65,12 +71,12 @@ var Module = fx.Module(
 	fx.Provide(newInvocationTaskHandler),
 	fx.Provide(newBackoffTaskHandler),
 	fx.Provide(newCallbackExecutionHandler),
-	fx.Provide(newLibrary),
 
 	fx.Provide(NewScheduleToCloseTimeoutTaskHandler),
 
 	// Register the Callback CHASM component on startup.
-	fx.Invoke(func(registry *chasm.Registry, library *Library) error {
+	fx.Provide(newLibrary),
+	fx.Invoke(func(registry *chasm.Registry, library *library) error {
 		return registry.Register(library)
 	}),
 )
