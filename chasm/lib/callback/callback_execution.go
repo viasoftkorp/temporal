@@ -34,7 +34,7 @@ var (
 // It owns a child Callback component and implements CompletionSource to provide
 // stored Nexus completion data for invocation.
 //
-// TODO(chrsmith): Unresolved comment in earlier PR.
+// TODO(chrsmith): https://github.com/temporalio/temporal/pull/9805/changes#r3105932218
 // > Roey: The other components that we support both standalone and embdded are structured differently. We don't
 // >   create these wrapper components for them and instead make the embedded component multi-purpose. Not that
 // >   what you did is incorrect, it's just different than what we have done in the past and IMHO best to keep
