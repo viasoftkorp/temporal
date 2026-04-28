@@ -57,6 +57,8 @@ var FrontendModule = fx.Module(
 	fx.Provide(callbackspb.NewCallbackExecutionServiceLayeredClient),
 	fx.Provide(NewFrontendHandler),
 
+	fx.Provide(ConfigProvider),
+
 	// Register only a slimmed-down library for the frontend.
 	fx.Provide(newComponentOnlyLibrary),
 	fx.Invoke(func(registry *chasm.Registry, coLibrary *componentOnlyLibrary) error {
