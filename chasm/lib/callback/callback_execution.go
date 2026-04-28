@@ -72,6 +72,8 @@ func CreateCallbackExecution(
 	ctx chasm.MutableContext,
 	input *StartCallbackExecutionInput,
 ) (*CallbackExecution, error) {
+	// TODO(chrsmith): Should this be `[MutableContext]ctx.Now(chasm.Component)`? But what
+	// chasm.Component should be passed to that, since one hasn't been created yet?
 	now := timestamppb.Now()
 
 	state := &callbackspb.CallbackExecutionState{
@@ -91,11 +93,11 @@ func CreateCallbackExecution(
 		}
 	}
 
+	// Create child Callback component.
+	//
 	// TODO(chrsmith): Unresolved comment.
 	// > Roey: When you rewrite to reuse the callback component, make the completion an embedded field
 	// > because it can save some memory for transitions and APIs that don't require this potentially large piece of data.
-
-	// Create child Callback component.
 	cb := NewCallback(
 		input.RequestID,
 		now,
@@ -118,12 +120,11 @@ func CreateCallbackExecution(
 
 	// Schedule the timeout task if ScheduleToCloseTimeout is set.
 	if input.ScheduleToCloseTimeout != nil {
-		if timeout := input.ScheduleToCloseTimeout.AsDuration(); timeout > 0 {
+		if duration := input.ScheduleToCloseTimeout.AsDuration(); duration > 0 {
+			timeoutTime := now.AsTime().Add(duration)
 			ctx.AddTask(
 				cb,
-				chasm.TaskAttributes{
-					ScheduledTime: now.AsTime().Add(timeout),
-				},
+				chasm.TaskAttributes{ScheduledTime: timeoutTime},
 				&callbackspb.ScheduleToCloseTimeoutTask{},
 			)
 		}
@@ -133,8 +134,10 @@ func CreateCallbackExecution(
 }
 
 func (e *CallbackExecution) ContextMetadata(ctx chasm.Context) map[string]string {
-	// TODO(chrsmith): This interface method was added recently. Implement.
-	return map[string]string{}
+	md := map[string]string{
+		"CallbackID": e.GetCallbackId(),
+	}
+	return md
 }
 
 // LifecycleState delegates to the child Callback's lifecycle state.
@@ -154,12 +157,12 @@ func (e *CallbackExecution) Terminate(
 	if cb.LifecycleState(ctx).IsClosed() {
 		if e.TerminateRequestId == "" {
 			// Completed organically (succeeded/failed/timed out), not via Terminate.
-			return chasm.TerminateComponentResponse{}, serviceerror.NewFailedPreconditionf(
-				"callback execution already in terminal state %v", cb.Status)
+			err := serviceerror.NewFailedPreconditionf("callback execution already in terminal state %v", cb.Status)
+			return chasm.TerminateComponentResponse{}, err
 		}
 		if e.TerminateRequestId != req.RequestID {
-			return chasm.TerminateComponentResponse{}, serviceerror.NewFailedPreconditionf(
-				"already terminated with request ID %s", e.TerminateRequestId)
+			err := serviceerror.NewFailedPreconditionf("already terminated with request ID %s", e.TerminateRequestId)
+			return chasm.TerminateComponentResponse{}, err
 		}
 		return chasm.TerminateComponentResponse{}, nil
 	}
@@ -196,24 +199,24 @@ func (e *CallbackExecution) Describe(ctx chasm.Context) (*callbackpb.CallbackExe
 	return info, nil
 }
 
-// TODO(chrsmith): Unresolved comment.
-// > Roey: Same nit: Don't use Get for getters in Go. https://go.dev/doc/effective_go#Getters
-
-// GetOutcome returns the callback execution outcome if the execution is in a terminal state.
+// Outcome returns the callback execution outcome if the execution is in a terminal state. (Otherwise, nil.)
 func (e *CallbackExecution) GetOutcome(ctx chasm.Context) (*callbackpb.CallbackExecutionOutcome, error) {
 	cb := e.Callback.Get(ctx)
 	switch cb.Status {
 	case callbackspb.CALLBACK_STATUS_SUCCEEDED:
+		val := &callbackpb.CallbackExecutionOutcome_Success{}
 		return &callbackpb.CallbackExecutionOutcome{
-			Value: &callbackpb.CallbackExecutionOutcome_Success{},
+			Value: val,
 		}, nil
-	case callbackspb.CALLBACK_STATUS_FAILED,
-		callbackspb.CALLBACK_STATUS_TERMINATED:
+
+	case callbackspb.CALLBACK_STATUS_FAILED, callbackspb.CALLBACK_STATUS_TERMINATED:
+		val := &callbackpb.CallbackExecutionOutcome_Failure{
+			Failure: cb.GetFailure(),
+		}
 		return &callbackpb.CallbackExecutionOutcome{
-			Value: &callbackpb.CallbackExecutionOutcome_Failure{
-				Failure: cb.GetFailure(),
-			},
+			Value: val,
 		}, nil
+
 	default:
 		return nil, nil
 	}
@@ -260,8 +263,9 @@ func callbackStatusToAPIState(status callbackspb.CallbackStatus) enumspb.Callbac
 // SearchAttributes implements chasm.VisibilitySearchAttributesProvider.
 func (e *CallbackExecution) SearchAttributes(ctx chasm.Context) []chasm.SearchAttributeKeyValue {
 	cb := e.Callback.Get(ctx)
+	statusStr := callbackStatusToAPIExecutionStatus(cb.Status).String()
 	return []chasm.SearchAttributeKeyValue{
-		executionStatusSearchAttribute.Value(callbackStatusToAPIExecutionStatus(cb.Status).String()),
+		executionStatusSearchAttribute.Value(statusStr),
 	}
 }
 
@@ -276,7 +280,7 @@ func (e *CallbackExecution) Memo(ctx chasm.Context) proto.Message {
 		CloseTime:  cb.CloseTime,
 	}
 
-	// TODO(chrsmith): Unresolved comment.
+	// TODO(chrsmith): https://github.com/temporalio/temporal/pull/9805/changes#r3105967769
 	// > Roey: All of these fields should be available to you. You shouldn't need to store any of this in visibility.
 	// > Quinn: Sorry I don't understand are you saying they shouldn't be on the list output?
 	// > Roey: Yes in list output, not in the CHASM memo field.
@@ -284,16 +288,14 @@ func (e *CallbackExecution) Memo(ctx chasm.Context) proto.Message {
 
 // GetNexusCompletion implements CompletionSource. It converts the stored completion
 // payload to nexusrpc.CompleteOperationOptions for use by the Callback invocation logic.
-//
-// TODO(chrsmith): Unresolved comment.
-// > Roey: Don't worry, I'm going to change this interface to not call the method Get... :)
 func (e *CallbackExecution) GetNexusCompletion(
 	ctx chasm.Context,
-	requestID string,
-) (nexusrpc.CompleteOperationOptions, error) {
+	requestID string) (nexusrpc.CompleteOperationOptions, error) {
+
 	opts := nexusrpc.CompleteOperationOptions{
 		StartTime: e.CreateTime.AsTime(),
 	}
+
 	switch c := e.Completion.(type) {
 	case *callbackspb.CallbackExecutionState_SuccessCompletion:
 		opts.Result = c.SuccessCompletion
@@ -301,7 +303,8 @@ func (e *CallbackExecution) GetNexusCompletion(
 	case *callbackspb.CallbackExecutionState_FailureCompletion:
 		f, err := commonnexus.TemporalFailureToNexusFailure(c.FailureCompletion)
 		if err != nil {
-			return nexusrpc.CompleteOperationOptions{}, fmt.Errorf("failed to convert failure: %w", err)
+			wrappedErr := fmt.Errorf("failed to convert failure: %w", err)
+			return nexusrpc.CompleteOperationOptions{}, wrappedErr
 		}
 		opErr := &nexus.OperationError{
 			State:   nexus.OperationStateFailed,
@@ -309,7 +312,8 @@ func (e *CallbackExecution) GetNexusCompletion(
 			Cause:   &nexus.FailureError{Failure: f},
 		}
 		if err := nexusrpc.MarkAsWrapperError(nexusrpc.DefaultFailureConverter(), opErr); err != nil {
-			return nexusrpc.CompleteOperationOptions{}, fmt.Errorf("failed to mark wrapper error: %w", err)
+			wrappedErr := fmt.Errorf("failed to mark wrapper error: %w", err)
+			return nexusrpc.CompleteOperationOptions{}, wrappedErr
 		}
 		opts.Error = opErr
 		return opts, nil

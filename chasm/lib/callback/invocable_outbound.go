@@ -117,8 +117,8 @@ func isRetryableCallError(err error) bool {
 // returned when a completion arrives before the Nexus start handler has returned.
 func isOperationNotStartedError(err error) bool {
 	var handlerError *nexus.HandlerError
-	// TODO(chrsmith): Unresolved comment.
-	// > At minimum we should verify the handler error type here. Please also use errors.AsType.
+	// TODO(chrsmith): https://github.com/temporalio/temporal/pull/9805/changes#r3106006542
+	// > @bergundy: At minimum we should verify the handler error type here. Please also use errors.AsType.
 	// > We should also put a TODO to only do this special case when calling into the "system",
 	// > I believe retryable worker callbacks should always trip the circuit breaker.
 	if errors.As(err, &handlerError) {
