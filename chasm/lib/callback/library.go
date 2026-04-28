@@ -11,13 +11,10 @@ import (
 // but not any of their implementation details.
 type componentOnlyLibrary struct {
 	chasm.UnimplementedLibrary
-	config *Config
 }
 
 func newComponentOnlyLibrary(config *Config, namespaceRegistry namespace.Registry) *componentOnlyLibrary {
-	return &componentOnlyLibrary{
-		config: config,
-	}
+	return &componentOnlyLibrary{}
 }
 
 func (l *componentOnlyLibrary) Name() string {
@@ -42,6 +39,7 @@ func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 type library struct {
 	componentOnlyLibrary
 
+	config                            *Config
 	InvocationTaskHandler             *invocationTaskHandler
 	BackoffTaskHandler                *backoffTaskHandler
 	ScheduleToCloseTimeoutTaskHandler *ScheduleToCloseTimeoutTaskHandler

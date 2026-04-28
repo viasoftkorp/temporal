@@ -33,6 +33,8 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
+// go test ./tests/ -tags=test_dep -testify.m TestStandaloneCallbackSuite
+
 type StandaloneCallbackSuite struct {
 	testcore.FunctionalTestBase
 }

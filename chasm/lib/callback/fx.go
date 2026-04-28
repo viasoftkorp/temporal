@@ -47,33 +47,26 @@ func httpCallerProviderProvider(
 	return m.Get, nil
 }
 
-// TODO(chrsmith): https://github.com/temporalio/temporal/pull/9805/changes#r3105970750
-// > You'll need to also split the library as we've done for SAA. Visibility needs
-// > the registered components in order to figure out the CHASM aliases.
-// ---
-// Wiring some of the newly added API endpoints to `callback/library.go`...
+// Slimmed-down module just containing the CHASM components, but not their implementation.
 var FrontendModule = fx.Module(
 	"callback-frontend",
 	fx.Provide(callbackspb.NewCallbackExecutionServiceLayeredClient),
+	fx.Provide(ConfigProvider),
 	fx.Provide(NewFrontendHandler),
 
-	fx.Provide(ConfigProvider),
-
-	// Register only a slimmed-down library for the frontend.
 	fx.Provide(newComponentOnlyLibrary),
 	fx.Invoke(func(registry *chasm.Registry, coLibrary *componentOnlyLibrary) error {
 		return registry.Register(coLibrary)
 	}),
 )
 
-var Module = fx.Module(
+var HistoryModule = fx.Module(
 	"chasm.lib.callback",
 	fx.Provide(ConfigProvider),
 	fx.Provide(httpCallerProviderProvider),
 	fx.Provide(newInvocationTaskHandler),
 	fx.Provide(newBackoffTaskHandler),
 	fx.Provide(newCallbackExecutionHandler),
-
 	fx.Provide(NewScheduleToCloseTimeoutTaskHandler),
 
 	// Register the Callback CHASM component on startup.
