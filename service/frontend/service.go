@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm/lib/activity"
+	"go.temporal.io/server/chasm/lib/callback"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -237,7 +238,7 @@ type Config struct {
 
 	// CHASM archetypes
 	Activity *activity.Config
-	// TODO(chrsmith): I'm guessing the callback config needs to be wired up here, too?
+	Callback *callback.Config
 }
 
 // IsExperimentAllowed checks if an experiment is enabled for a given namespace in the dynamic config.
@@ -405,7 +406,9 @@ func NewConfig(
 		HTTPAllowedHosts:   dynamicconfig.FrontendHTTPAllowedHosts.Get(dc),
 		AllowedExperiments: dynamicconfig.FrontendAllowedExperiments.Get(dc),
 
+		// CHASM component configurations.
 		Activity: activity.ConfigProvider(dc),
+		Callback: callback.ConfigProvider(dc),
 	}
 }
 

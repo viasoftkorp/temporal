@@ -55,12 +55,12 @@ func httpCallerProviderProvider(
 var FrontendModule = fx.Module(
 	"callback-frontend",
 	fx.Provide(callbackspb.NewCallbackExecutionServiceLayeredClient),
-	fx.Provide(NewCallbackExecutionFrontendHandler),
+	fx.Provide(NewFrontendHandler),
 )
 
 var Module = fx.Module(
 	"chasm.lib.callback",
-	fx.Provide(configProvider),
+	fx.Provide(ConfigProvider),
 	fx.Provide(httpCallerProviderProvider),
 	fx.Provide(newInvocationTaskHandler),
 	fx.Provide(newBackoffTaskHandler),

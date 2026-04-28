@@ -13,37 +13,35 @@ import (
 	"go.temporal.io/server/common/namespace"
 )
 
-type (
-	// CallbackExecutionFrontendHandler defines the frontend interface for standalone callback execution RPCs.
-	CallbackExecutionFrontendHandler interface {
-		StartCallbackExecution(context.Context, *workflowservice.StartCallbackExecutionRequest) (*workflowservice.StartCallbackExecutionResponse, error)
-		DescribeCallbackExecution(context.Context, *workflowservice.DescribeCallbackExecutionRequest) (*workflowservice.DescribeCallbackExecutionResponse, error)
-		PollCallbackExecution(context.Context, *workflowservice.PollCallbackExecutionRequest) (*workflowservice.PollCallbackExecutionResponse, error)
-		TerminateCallbackExecution(context.Context, *workflowservice.TerminateCallbackExecutionRequest) (*workflowservice.TerminateCallbackExecutionResponse, error)
-		DeleteCallbackExecution(context.Context, *workflowservice.DeleteCallbackExecutionRequest) (*workflowservice.DeleteCallbackExecutionResponse, error)
-		ListCallbackExecutions(context.Context, *workflowservice.ListCallbackExecutionsRequest) (*workflowservice.ListCallbackExecutionsResponse, error)
-		CountCallbackExecutions(context.Context, *workflowservice.CountCallbackExecutionsRequest) (*workflowservice.CountCallbackExecutionsResponse, error)
-		IsStandaloneCallbackEnabled(namespaceName string) bool
-	}
-
-	callbackExecutionFrontendHandler struct {
-		client            callbackspb.CallbackExecutionServiceClient
-		config            *Config
-		logger            log.Logger
-		namespaceRegistry namespace.Registry
-	}
-)
-
 var ErrStandaloneCallbackDisabled = serviceerror.NewUnimplemented("standalone callback executions are not enabled")
 
-// NewCallbackExecutionFrontendHandler creates a new frontend handler for standalone callback executions.
-func NewCallbackExecutionFrontendHandler(
+// FrontendHandler defines the frontend interface for standalone callback execution RPCs.
+type FrontendHandler interface {
+	StartCallbackExecution(context.Context, *workflowservice.StartCallbackExecutionRequest) (*workflowservice.StartCallbackExecutionResponse, error)
+	DescribeCallbackExecution(context.Context, *workflowservice.DescribeCallbackExecutionRequest) (*workflowservice.DescribeCallbackExecutionResponse, error)
+	PollCallbackExecution(context.Context, *workflowservice.PollCallbackExecutionRequest) (*workflowservice.PollCallbackExecutionResponse, error)
+	TerminateCallbackExecution(context.Context, *workflowservice.TerminateCallbackExecutionRequest) (*workflowservice.TerminateCallbackExecutionResponse, error)
+	DeleteCallbackExecution(context.Context, *workflowservice.DeleteCallbackExecutionRequest) (*workflowservice.DeleteCallbackExecutionResponse, error)
+	ListCallbackExecutions(context.Context, *workflowservice.ListCallbackExecutionsRequest) (*workflowservice.ListCallbackExecutionsResponse, error)
+	CountCallbackExecutions(context.Context, *workflowservice.CountCallbackExecutionsRequest) (*workflowservice.CountCallbackExecutionsResponse, error)
+	IsStandaloneCallbackEnabled(namespaceName string) bool
+}
+
+type frontendHandler struct {
+	client            callbackspb.CallbackExecutionServiceClient
+	config            *Config
+	logger            log.Logger
+	namespaceRegistry namespace.Registry
+}
+
+// NewFrontendHandler creates a new FrontendHandler instance for standalone callback executions.
+func NewFrontendHandler(
 	client callbackspb.CallbackExecutionServiceClient,
 	config *Config,
 	logger log.Logger,
 	namespaceRegistry namespace.Registry,
-) CallbackExecutionFrontendHandler {
-	return &callbackExecutionFrontendHandler{
+) FrontendHandler {
+	return &frontendHandler{
 		client:            client,
 		config:            config,
 		logger:            logger,
@@ -113,13 +111,13 @@ func validateCallbackURL(rawURL string, namespaceName string, config *Config) er
 
 // TODO(chrsmith): Unresolved comment.
 // > Roey: You should change this to also check if CHASM and transition history is enabled. Those are all prereqs.
-func (h *callbackExecutionFrontendHandler) IsStandaloneCallbackEnabled(namespaceName string) bool {
+func (h *frontendHandler) IsStandaloneCallbackEnabled(namespaceName string) bool {
 	return h.config.EnableStandaloneExecutions(namespaceName)
 }
 
 // StartCallbackExecution creates a new standalone callback execution that will deliver the
 // provided Nexus completion payload to the target callback URL with retries.
-func (h *callbackExecutionFrontendHandler) StartCallbackExecution(
+func (h *frontendHandler) StartCallbackExecution(
 	ctx context.Context,
 	request *workflowservice.StartCallbackExecutionRequest,
 ) (*workflowservice.StartCallbackExecutionResponse, error) {
@@ -152,7 +150,7 @@ func (h *callbackExecutionFrontendHandler) StartCallbackExecution(
 
 // DescribeCallbackExecution returns detailed information about a callback execution
 // including its current state, delivery attempt history, and timing information.
-func (h *callbackExecutionFrontendHandler) DescribeCallbackExecution(
+func (h *frontendHandler) DescribeCallbackExecution(
 	ctx context.Context,
 	request *workflowservice.DescribeCallbackExecutionRequest,
 ) (*workflowservice.DescribeCallbackExecutionResponse, error) {
@@ -180,7 +178,7 @@ func (h *callbackExecutionFrontendHandler) DescribeCallbackExecution(
 }
 
 // PollCallbackExecution blocks until the callback execution completes and returns its outcome.
-func (h *callbackExecutionFrontendHandler) PollCallbackExecution(
+func (h *frontendHandler) PollCallbackExecution(
 	ctx context.Context,
 	request *workflowservice.PollCallbackExecutionRequest,
 ) (*workflowservice.PollCallbackExecutionResponse, error) {
@@ -209,7 +207,7 @@ func (h *callbackExecutionFrontendHandler) PollCallbackExecution(
 
 // TerminateCallbackExecution forcefully stops a running callback execution.
 // No-op if already in a terminal state.
-func (h *callbackExecutionFrontendHandler) TerminateCallbackExecution(
+func (h *frontendHandler) TerminateCallbackExecution(
 	ctx context.Context,
 	request *workflowservice.TerminateCallbackExecutionRequest,
 ) (*workflowservice.TerminateCallbackExecutionResponse, error) {
@@ -237,7 +235,7 @@ func (h *callbackExecutionFrontendHandler) TerminateCallbackExecution(
 }
 
 // DeleteCallbackExecution terminates the callback if still running and marks it for cleanup.
-func (h *callbackExecutionFrontendHandler) DeleteCallbackExecution(
+func (h *frontendHandler) DeleteCallbackExecution(
 	ctx context.Context,
 	request *workflowservice.DeleteCallbackExecutionRequest,
 ) (*workflowservice.DeleteCallbackExecutionResponse, error) {
@@ -271,7 +269,7 @@ func (h *callbackExecutionFrontendHandler) DeleteCallbackExecution(
 // > Roey: Follow chasm/lib/activity/frontend.go ListActivityExecutions please.
 // > Quinn:  I did when I wrote this, sorry I don't understand the feedback here.
 // > Roey: Read the fields either from search attributes or VisibilityExecutionInfo, same as ListActivityExecutions.
-func (h *callbackExecutionFrontendHandler) ListCallbackExecutions(
+func (h *frontendHandler) ListCallbackExecutions(
 	ctx context.Context,
 	request *workflowservice.ListCallbackExecutionsRequest,
 ) (*workflowservice.ListCallbackExecutionsResponse, error) {
@@ -316,7 +314,7 @@ func (h *callbackExecutionFrontendHandler) ListCallbackExecutions(
 
 // CountCallbackExecutions returns the number of callback executions matching the query,
 // with optional grouping by search attribute values.
-func (h *callbackExecutionFrontendHandler) CountCallbackExecutions(
+func (h *frontendHandler) CountCallbackExecutions(
 	ctx context.Context,
 	request *workflowservice.CountCallbackExecutionsRequest,
 ) (*workflowservice.CountCallbackExecutionsResponse, error) {

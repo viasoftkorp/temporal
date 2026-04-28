@@ -80,7 +80,7 @@ type Config struct {
 	CallbackURLMaxLength dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
-func configProvider(dc *dynamicconfig.Collection) *Config {
+func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 	getRetryPolicyFn := func() backoff.RetryPolicy {
 		return backoff.
 			NewExponentialRetryPolicy(RetryPolicyInitialInterval.Get(dc)()).
