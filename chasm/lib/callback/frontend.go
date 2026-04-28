@@ -70,7 +70,7 @@ func validateStartCallbackExecutionRequest(request *workflowservice.StartCallbac
 	if nexusCb.GetUrl() == "" {
 		return serviceerror.NewInvalidArgument("Callback URL is not set.")
 	}
-	// TODO(chrsmith): Unresolved comment.
+	// TODO(chrsmith): Unresolved comment. Refer to https://github.com/temporalio/temporal/pull/9786.
 	// > Roey: @fretz12 added a callback validator in #9786. Use the same one please.
 
 	// Validate callback URL structure and length.
