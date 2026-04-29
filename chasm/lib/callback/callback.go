@@ -80,9 +80,11 @@ func (c *Callback) SetStateMachineState(status callbackspb.CallbackStatus) {
 // (set by external failures like timeout or terminate) first, then falls back to LastAttemptFailure
 // (set by invocation attempt failures).
 //
+// IMPORTANT: Don't conflate this with `c.Failure`, which is the raw data from the `CallbackState`,
+// and does not take `c.LastFailureAttempt` into account.
 // TODO(chrsmith): Unaddress comment in earlier PR.
-// > Roey: nit: I would prefer not to use Get for getters in Go. We've been trying to move away from that practice.
-// > You can name this Failure() or TerminalFailure()` or something similar.
+//
+// TODO(chrsmith): Rename to something more meaningful? MostRecentFailure? TerminalFailure?
 func (c *Callback) GetFailure() *failurepb.Failure {
 	if c.Failure != nil {
 		return c.Failure

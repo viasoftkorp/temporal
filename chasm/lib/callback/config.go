@@ -74,10 +74,10 @@ type Config struct {
 	RequestTimeout             dynamicconfig.DurationPropertyFnWithDestinationFilter
 	RetryPolicy                func() backoff.RetryPolicy
 
-	// TODO(chrsmith): MaxPerExecution is missing. Is that a problem?
-
-	// Configuration values from other modules.
-	CallbackURLMaxLength dynamicconfig.IntPropertyFnWithNamespaceFilter
+	// TODO: MaxPerExecution is missing. It is used as part of callback.Validator, and is loaded there.
+	// Once HSM callbacks (components/callbacks) are removed, the callbackValidatorProvider in
+	// frontend/fx.go can be moved into this package. And at that time, we can simply have the
+	// callback.Validator inject callback.Config. (And have a single location for all config options.)
 }
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {
@@ -89,14 +89,10 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 	}
 
 	return &Config{
-		// callback.* settings.
 		EnableStandaloneExecutions: EnableStandaloneExecutions.Get(dc),
 		LongPollBuffer:             LongPollBuffer.Get(dc),
 		LongPollTimeout:            LongPollTimeout.Get(dc),
 		RequestTimeout:             RequestTimeout.Get(dc),
 		RetryPolicy:                getRetryPolicyFn,
-
-		// frontend.callbackURLMaxLength
-		CallbackURLMaxLength: dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
 	}
 }
