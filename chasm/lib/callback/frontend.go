@@ -250,12 +250,20 @@ func (h *frontendHandler) PollCallbackExecution(
 }
 
 func validateTerminateCallbackExecution(req *workflowservice.TerminateCallbackExecutionRequest) error {
-	if req.GetNamespace() == "" {
-		return missingRequiredFieldError("Namespace")
+	// Required fields.
+	requiredFields := map[string]string{
+		"Namespace":  req.GetNamespace(),
+		"CallbackId": req.GetCallbackId(),
+
+		// NOTE: We don't require the Identity or Reason fields to be set,
+		// and just set reasonable defaults.
 	}
-	if req.GetCallbackId() == "" {
-		return missingRequiredFieldError("CallbackID")
+	for k, v := range requiredFields {
+		if v == "" {
+			return missingRequiredFieldError(k)
+		}
 	}
+
 	return nil
 }
 
