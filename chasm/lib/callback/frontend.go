@@ -42,7 +42,7 @@ type frontendHandler struct {
 
 	client            callbackspb.CallbackExecutionServiceClient
 	config            *Config
-	callbackValidator *Validator
+	callbackValidator Validator
 }
 
 // NewFrontendHandler creates a new FrontendHandler instance for standalone callback executions.
@@ -51,7 +51,7 @@ func NewFrontendHandler(
 	namespaceRegistry namespace.Registry,
 	client callbackspb.CallbackExecutionServiceClient,
 	config *Config,
-	callbackValidator *Validator,
+	callbackValidator Validator,
 ) FrontendHandler {
 	return &frontendHandler{
 		logger:            logger,
@@ -84,7 +84,7 @@ func (h *frontendHandler) checkFeatureEnabled(requestProto HasNamespace) error {
 	return nil
 }
 
-func validateStartCallbackExecution(req *workflowservice.StartCallbackExecutionRequest, cbValidator *Validator) error {
+func validateStartCallbackExecution(req *workflowservice.StartCallbackExecutionRequest, cbValidator Validator) error {
 	// Required fields.
 	requiredFields := map[string]string{
 		"Namespace":  req.GetNamespace(),
