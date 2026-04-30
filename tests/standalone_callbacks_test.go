@@ -3,6 +3,9 @@ package tests
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"slices"
 	"testing"
 	"time"
 
@@ -15,6 +18,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	historypb "go.temporal.io/api/history/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -166,7 +170,7 @@ func (s *StandaloneCallbackSuite) SetupSuite() {
 //
 // However, since the Nexus callback isn't even registered, the callback execution will
 // aways result in timing out.
-func (s *StandaloneCallbackSuite) startCallbackExecutionToBogusCallback(
+func (s *StandaloneCallbackSuite) callStartCallbackExecutionToBogusCallback(
 	ctx context.Context,
 	callbackID string,
 	timeout time.Duration,
@@ -179,11 +183,26 @@ func (s *StandaloneCallbackSuite) startCallbackExecutionToBogusCallback(
 			},
 		},
 	}
+
 	completion := &callbackpb.CallbackExecutionCompletion{
 		Result: &callbackpb.CallbackExecutionCompletion_Success{
 			Success: testcore.MustToPayload(s.T(), "some-result"),
 		},
 	}
+
+	return s.callStartCallbackExecution(ctx, callbackID, callback, completion, timeout)
+}
+
+// Call the StartCallbackExecution API with the given parameters.
+func (s *StandaloneCallbackSuite) callStartCallbackExecution(
+	ctx context.Context,
+	callbackID string,
+	callback *commonpb.Callback,
+	completion *callbackpb.CallbackExecutionCompletion,
+	timeout time.Duration,
+) *workflowservice.StartCallbackExecutionResponse {
+	s.T().Helper()
+
 	resp, err := s.FrontendClient().StartCallbackExecution(ctx, &workflowservice.StartCallbackExecutionRequest{
 		Namespace:  s.Namespace().String(),
 		Identity:   "startCallbackExecution",
@@ -447,7 +466,7 @@ func (s *StandaloneCallbackSuite) TestPollCallbackExecution() {
 
 		// Report the result of a non-existent, non-routable callback. The CallbackExecution
 		// will linger for 1m before timing out.
-		s.startCallbackExecutionToBogusCallback(ctx, callbackID, time.Minute)
+		s.callStartCallbackExecutionToBogusCallback(ctx, callbackID, time.Minute)
 
 		// Poll a non-terminal callback with a short timeout. Should return an empty response.
 		// NOTE: Passing a shorter timeout like 1s will cause failure with "Workflow is busy."
@@ -481,7 +500,7 @@ func (s *StandaloneCallbackSuite) TestPollCallbackExecution() {
 
 	s.Run("blocks_until_complete", func() {
 		callbackID := "poll-blocks-" + uuid.NewString()
-		s.startCallbackExecutionToBogusCallback(ctx, callbackID, time.Minute)
+		s.callStartCallbackExecutionToBogusCallback(ctx, callbackID, time.Minute)
 
 		// Start a long-poll in a goroutine.
 		type pollResult struct {
@@ -522,7 +541,7 @@ func (s *StandaloneCallbackSuite) TestPollCallbackExecution() {
 
 	s.Run("returns_run_id", func() {
 		callbackID := "poll-runid-" + uuid.NewString()
-		startResp := s.startCallbackExecutionToBogusCallback(ctx, callbackID, time.Minute)
+		startResp := s.callStartCallbackExecutionToBogusCallback(ctx, callbackID, time.Minute)
 
 		gotRunID := startResp.GetRunId()
 
@@ -549,7 +568,7 @@ func (s *StandaloneCallbackSuite) TestPollCallbackExecution() {
 	s.Run("poll_after_timeout", func() {
 		callbackID := "poll-timeout-" + uuid.NewString()
 		// Start with a very short schedule-to-close timeout so it times out quickly.
-		s.startCallbackExecutionToBogusCallback(ctx, callbackID, 500*time.Millisecond)
+		s.callStartCallbackExecutionToBogusCallback(ctx, callbackID, 500*time.Millisecond)
 
 		// Wait for the callback to time out, then poll for the outcome.
 		const (
@@ -583,7 +602,7 @@ func (s *StandaloneCallbackSuite) TestDeleteCallbackExecution() {
 	// Create a callback that points to a non-existent URL so it won't complete on its own.
 	// The callback will be in SCHEDULED/BACKING_OFF state when we delete it.
 	callbackID := "delete-test-" + uuid.NewString()
-	startResp := s.startCallbackExecutionToBogusCallback(ctx, callbackID, time.Minute)
+	startResp := s.callStartCallbackExecutionToBogusCallback(ctx, callbackID, time.Minute)
 	runID := startResp.GetRunId()
 
 	// Describe using run_id to verify it was created.
@@ -799,7 +818,7 @@ func (s *StandaloneCallbackSuite) TestListAndCountCallbackExecutions() {
 	callbackIDs := make([]string, 2)
 	for i := range 2 {
 		callbackIDs[i] = fmt.Sprintf("list-test-%d-%s", i, uuid.NewString())
-		s.startCallbackExecutionToBogusCallback(ctx, callbackIDs[i], time.Minute)
+		s.callStartCallbackExecutionToBogusCallback(ctx, callbackIDs[i], time.Minute)
 	}
 
 	// List callback executions — visibility indexing may be async, so use EventuallyWithT.
@@ -952,7 +971,7 @@ func (s *StandaloneCallbackSuite) TestTerminateCallbackExecution() {
 	defer cancel()
 
 	callbackID := "terminate-test-" + uuid.NewString()
-	startResp := s.startCallbackExecutionToBogusCallback(ctx, callbackID, time.Minute)
+	startResp := s.callStartCallbackExecutionToBogusCallback(ctx, callbackID, time.Minute)
 	requestID := uuid.NewString()
 	runID := startResp.GetRunId()
 
@@ -1040,153 +1059,158 @@ func (s *StandaloneCallbackSuite) TestTerminateCallbackExecution() {
 	s.Contains(err.Error(), "already terminated with request ID")
 }
 
-// // TestCallbackExecutionFailedOutcome tests that when a callback fails with a non-retryable error
-// // (e.g., a 400 response from the target), the poll outcome contains the failure details.
-// func (s *StandaloneCallbackSuite) TestCallbackExecutionFailedOutcome() {
-// 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
-// 	defer cancel()
+// TestCallbackExecutionFailedOutcome tests that when a callback fails with a non-retryable error
+// (e.g., a 400 response from the target), the poll outcome contains the failure details.
+func (s *StandaloneCallbackSuite) TestCallbackExecutionFailedOutcome() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
 
-// 	// Start an HTTP server that always returns 400 Bad Request (non-retryable).
-// 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-// 		w.WriteHeader(http.StatusBadRequest)
-// 	}))
-// 	defer srv.Close()
+	// Start an HTTP server that always returns 400 Bad Request (non-retryable).
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	defer srv.Close()
 
-// 	callbackID := "failed-outcome-test-" + uuid.NewString()
-// 	s.mustStartCallbackExecution(ctx, callbackID, &commonpb.Callback{
-// 		Variant: &commonpb.Callback_Nexus_{
-// 			Nexus: &commonpb.Callback_Nexus{Url: srv.URL + "/callback"},
-// 		},
-// 	}, nil, time.Minute)
+	callbackID := "failed-outcome-test-" + uuid.NewString()
+	callback := &commonpb.Callback{
+		Variant: &commonpb.Callback_Nexus_{
+			Nexus: &commonpb.Callback_Nexus{Url: srv.URL + "/callback"},
+		},
+	}
+	completion := &callbackpb.CallbackExecutionCompletion{
+		Result: &callbackpb.CallbackExecutionCompletion_Success{
+			Success: testcore.MustToPayload(s.T(), "some-result"),
+		},
+	}
+	s.callStartCallbackExecution(ctx, callbackID, callback, completion, time.Minute)
 
-// 	// Poll for the outcome — the callback should eventually fail with a non-retryable error.
-// 	pollResp, err := s.FrontendClient().PollCallbackExecution(ctx, &workflowservice.PollCallbackExecutionRequest{
-// 		Namespace:  s.Namespace().String(),
-// 		CallbackId: callbackID,
-// 	})
-// 	s.NoError(err)
-// 	s.NotNil(pollResp.GetOutcome().GetFailure())
-// 	s.Contains(pollResp.GetOutcome().GetFailure().GetMessage(), "handler error (BAD_REQUEST)")
-// 	s.True(pollResp.GetOutcome().GetFailure().GetApplicationFailureInfo().GetNonRetryable())
-// }
+	// Poll for the outcome — the callback should eventually fail with a non-retryable error.
+	pollResp, err := s.FrontendClient().PollCallbackExecution(ctx, &workflowservice.PollCallbackExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		CallbackId: callbackID,
+	})
+	s.NoError(err)
+	s.NotNil(pollResp.GetOutcome().GetFailure())
+	s.Contains(pollResp.GetOutcome().GetFailure().GetMessage(), "handler error (BAD_REQUEST)")
+	s.True(pollResp.GetOutcome().GetFailure().GetApplicationFailureInfo().GetNonRetryable())
+}
 
-// // TestNexusOperationCompletionBeforeStartHandlerReturns tests that a standalone callback can
-// // complete a Nexus operation even when the callback execution is started *before* the Nexus
-// // start handler returns to the caller. This exercises the race where the completion arrives
-// // while the operation is still in SCHEDULED state (i.e., before transitioning to STARTED).
-// //
-// // Flow:
-// //  1. A caller workflow starts a Nexus operation via an external endpoint.
-// //  2. The external Nexus handler captures the callback URL/token and calls
-// //     StartCallbackExecution to deliver the completion *before* returning async.
-// //  3. The handler then returns an async result.
-// //  4. The operation can be completed from SCHEDULED state directly, so the workflow
-// //     receives the result regardless of the start handler timing.
-// func (s *StandaloneCallbackSuite) TestNexusOperationCompletionBeforeStartHandlerReturns() {
-// 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*60)
-// 	defer cancel()
+// TestNexusOperationCompletionBeforeStartHandlerReturns tests that a standalone callback can
+// complete a Nexus operation even when the callback execution is started *before* the Nexus
+// start handler returns to the caller. This exercises the race where the completion arrives
+// while the operation is still in SCHEDULED state (i.e., before transitioning to STARTED).
+//
+// Flow:
+//  1. A caller workflow starts a Nexus operation via an external endpoint.
+//  2. The external Nexus handler captures the callback URL/token and calls
+//     StartCallbackExecution to deliver the completion *before* returning async.
+//  3. The handler then returns an async result.
+//  4. The operation can be completed from SCHEDULED state directly, so the workflow
+//     receives the result regardless of the start handler timing.
+func (s *StandaloneCallbackSuite) TestNexusOperationCompletionBeforeStartHandlerReturns() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*60)
+	defer cancel()
 
-// 	taskQueue := testcore.RandomizeStr(s.T().Name())
-// 	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
-// 	// Set up an external Nexus handler that starts the standalone callback *inside*
-// 	// the start handler — before returning the async result — to simulate a race
-// 	// where the completion is delivered before the caller processes the start response.
-// 	h := nexustest.Handler{
-// 		OnStartOperation: func(
-// 			ctx context.Context,
-// 			service, operation string,
-// 			input *nexus.LazyValue,
-// 			options nexus.StartOperationOptions,
-// 		) (nexus.HandlerStartOperationResult[any], error) {
-// 			token := options.CallbackHeader.Get(commonnexus.CallbackTokenHeader)
-// 			callbackURL := options.CallbackURL
+	// Set up an external Nexus handler that starts the standalone callback *inside*
+	// the start handler — before returning the async result — to simulate a race
+	// where the completion is delivered before the caller processes the start response.
+	h := nexustest.Handler{
+		OnStartOperation: func(
+			ctx context.Context,
+			service, operation string,
+			input *nexus.LazyValue,
+			options nexus.StartOperationOptions,
+		) (nexus.HandlerStartOperationResult[any], error) {
+			token := options.CallbackHeader.Get(commonnexus.CallbackTokenHeader)
+			callbackURL := options.CallbackURL
 
-// 			// Start the standalone callback execution to deliver the completion
-// 			// BEFORE returning from this handler.
-// 			callbackID := "race-callback-" + uuid.NewString()
-// 			_, err := s.startCallbackExecution(ctx, callbackID, &commonpb.Callback{
-// 				Variant: &commonpb.Callback_Nexus_{
-// 					Nexus: &commonpb.Callback_Nexus{
-// 						Url:   callbackURL,
-// 						Token: token,
-// 					},
-// 				},
-// 			}, &callbackpb.CallbackExecutionCompletion{
-// 				Result: &callbackpb.CallbackExecutionCompletion_Success{
-// 					Success: testcore.MustToPayload(s.T(), "result-before-start-returns"),
-// 				},
-// 			}, time.Minute)
-// 			if err != nil {
-// 				return nil, nexus.NewOperationErrorf(nexus.OperationStateFailed, "StartCallbackExecution failed inside handler: %w", err)
-// 			}
+			// Start the standalone callback execution to deliver the completion
+			// BEFORE returning from this handler.
+			callbackID := "race-callback-" + uuid.NewString()
+			callback := &commonpb.Callback{
+				Variant: &commonpb.Callback_Nexus_{
+					Nexus: &commonpb.Callback_Nexus{
+						Url:   callbackURL,
+						Token: token,
+					},
+				},
+			}
+			completion := &callbackpb.CallbackExecutionCompletion{
+				Result: &callbackpb.CallbackExecutionCompletion_Success{
+					Success: testcore.MustToPayload(s.T(), "result-before-start-returns"),
+				},
+			}
+			s.callStartCallbackExecution(ctx, callbackID, callback, completion, time.Minute)
 
-// 			// Now return the async result — the completion has already been
-// 			// delivered and the operation should already be completed.
-// 			return &nexus.HandlerStartOperationResultAsync{
-// 				OperationToken: "test",
-// 			}, nil
-// 		},
-// 	}
-// 	listenAddr := nexustest.AllocListenAddress()
-// 	nexustest.NewNexusServer(s.T(), listenAddr, h)
+			// Now return the async result — the completion has already been
+			// delivered and the operation should already be completed.
+			return &nexus.HandlerStartOperationResultAsync{
+				OperationToken: "test",
+			}, nil
+		},
+	}
+	listenAddr := nexustest.AllocListenAddress()
+	nexustest.NewNexusServer(s.T(), listenAddr, h)
 
-// 	_, err := s.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
-// 		Spec: &nexuspb.EndpointSpec{
-// 			Name: endpointName,
-// 			Target: &nexuspb.EndpointTarget{
-// 				Variant: &nexuspb.EndpointTarget_External_{
-// 					External: &nexuspb.EndpointTarget_External{
-// 						Url: "http://" + listenAddr,
-// 					},
-// 				},
-// 			},
-// 		},
-// 	})
-// 	s.NoError(err)
+	_, err := s.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
+		Spec: &nexuspb.EndpointSpec{
+			Name: endpointName,
+			Target: &nexuspb.EndpointTarget{
+				Variant: &nexuspb.EndpointTarget_External_{
+					External: &nexuspb.EndpointTarget_External{
+						Url: "http://" + listenAddr,
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
 
-// 	// Register a caller workflow that starts a Nexus operation and waits for its result.
-// 	callerWf := func(ctx workflow.Context) (string, error) {
-// 		c := workflow.NewNexusClient(endpointName, "service")
-// 		fut := c.ExecuteOperation(ctx, "operation", "input", workflow.NexusOperationOptions{})
-// 		var result string
-// 		err := fut.Get(ctx, &result)
-// 		return result, err
-// 	}
+	// Register a caller workflow that starts a Nexus operation and waits for its result.
+	callerWf := func(ctx workflow.Context) (string, error) {
+		c := workflow.NewNexusClient(endpointName, "service")
+		fut := c.ExecuteOperation(ctx, "operation", "input", workflow.NexusOperationOptions{})
+		var result string
+		err := fut.Get(ctx, &result)
+		return result, err
+	}
 
-// 	w := worker.New(s.SdkClient(), taskQueue, worker.Options{})
-// 	w.RegisterWorkflow(callerWf)
-// 	s.NoError(w.Start())
-// 	defer w.Stop()
+	w := worker.New(s.SdkClient(), taskQueue, worker.Options{})
+	w.RegisterWorkflow(callerWf)
+	s.NoError(w.Start())
+	defer w.Stop()
 
-// 	// Start the caller workflow.
-// 	run, err := s.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-// 		TaskQueue: taskQueue,
-// 	}, callerWf)
-// 	s.NoError(err)
+	// Start the caller workflow.
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue: taskQueue,
+	}, callerWf)
+	s.NoError(err)
 
-// 	// The standalone callback delivers the completion even though it was started
-// 	// before the start handler returned. The operation transitions directly from
-// 	// SCHEDULED to SUCCEEDED.
-// 	var result string
-// 	s.NoError(run.Get(ctx, &result))
-// 	s.Equal("result-before-start-returns", result)
+	// The standalone callback delivers the completion even though it was started
+	// before the start handler returned. The operation transitions directly from
+	// SCHEDULED to SUCCEEDED.
+	var result string
+	s.NoError(run.Get(ctx, &result))
+	s.Equal("result-before-start-returns", result)
 
-// 	// Verify the operation token is recorded in the caller workflow's history.
-// 	histResp, err := s.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
-// 		Namespace: s.Namespace().String(),
-// 		Execution: &commonpb.WorkflowExecution{
-// 			WorkflowId: run.GetID(),
-// 			RunId:      run.GetRunID(),
-// 		},
-// 	})
-// 	s.NoError(err)
-// 	startedIdx := slices.IndexFunc(histResp.History.Events, func(e *historypb.HistoryEvent) bool {
-// 		return e.GetNexusOperationStartedEventAttributes() != nil
-// 	})
-// 	s.NotEqual(-1, startedIdx, "expected NexusOperationStarted event in history")
-// 	s.Equal("test", histResp.History.Events[startedIdx].GetNexusOperationStartedEventAttributes().GetOperationToken())
-// }
+	// Verify the operation token is recorded in the caller workflow's history.
+	histResp, err := s.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: run.GetID(),
+			RunId:      run.GetRunID(),
+		},
+	})
+	s.NoError(err)
+	startedIdx := slices.IndexFunc(histResp.History.Events, func(e *historypb.HistoryEvent) bool {
+		return e.GetNexusOperationStartedEventAttributes() != nil
+	})
+	s.NotEqual(-1, startedIdx, "expected NexusOperationStarted event in history")
+	s.Equal("test", histResp.History.Events[startedIdx].GetNexusOperationStartedEventAttributes().GetOperationToken())
+}
 
 // TestScheduleToCloseTimeout verifies that a callback execution transitions to FAILED
 // when its schedule-to-close timeout expires before the callback succeeds.
@@ -1196,7 +1220,7 @@ func (s *StandaloneCallbackSuite) TestScheduleToCloseTimeout() {
 
 	// Short timeout so it fires quickly during the test.
 	callbackID := "timeout-test-" + uuid.NewString()
-	s.startCallbackExecutionToBogusCallback(ctx, callbackID, 2*time.Second)
+	s.callStartCallbackExecutionToBogusCallback(ctx, callbackID, 2*time.Second)
 
 	// Poll until the callback reaches a terminal state due to timeout.
 	pollResp, err := s.FrontendClient().PollCallbackExecution(ctx, &workflowservice.PollCallbackExecutionRequest{
