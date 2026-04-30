@@ -23,6 +23,7 @@ func (a AddressMatchRules) Validate(rawURL string) error {
 	if rawURL == nexus.SystemCallbackURL || rawURL == chasm.NexusCompletionHandlerURL {
 		return nil
 	}
+
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return status.Errorf(codes.InvalidArgument, "invalid callback url: %v", err)

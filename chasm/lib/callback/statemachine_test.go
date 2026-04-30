@@ -132,7 +132,7 @@ func TestTerminatedTransition(t *testing.T) {
 		},
 	}
 
-	// TODO(chrsmith): Redundant to test all of these. But :shrug:.
+	// TODO(chrsmith): Redundant to test all of these.
 	for _, src := range []callbackspb.CallbackStatus{
 		callbackspb.CALLBACK_STATUS_STANDBY,
 		callbackspb.CALLBACK_STATUS_SCHEDULED,
@@ -151,7 +151,7 @@ func TestTerminatedTransition(t *testing.T) {
 }
 
 // TODO(chrsmith): I wpuld put this in component_test.go since it test a method of the component.
-// > Buta s mentioned before, youc an fold that into invocationResultRetry.
+// > But as mentioned before, youc an fold that into invocationResultRetry.
 func TestSaveResult_RetryNoCB(t *testing.T) {
 	// invocationResultRetryNoCB should transition to BACKING_OFF just like
 	// invocationResultRetry, but without triggering the circuit breaker

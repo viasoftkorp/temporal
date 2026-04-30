@@ -206,7 +206,7 @@ func (c *Callback) ToAPICallback() (*commonpb.Callback, error) {
 		return res, nil
 	}
 
-	// This should not happen as CHASM only supports Nexus callbacks currently
+	// This should not happen as CHASM only supports Nexus callbacks currently.
 	return nil, serviceerror.NewInternal("unsupported CHASM callback type")
 }
 

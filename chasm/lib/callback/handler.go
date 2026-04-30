@@ -125,6 +125,8 @@ func (h *callbackExecutionHandler) DescribeCallbackExecution(
 				Info: info,
 			}
 			// TODO(chrsmith): There should be an IncludeInput field on this request since you don't want the input populated on every describe response in the UI.
+			// The field is on the incomming API, but we just aren't honoring it here.
+			// if req.FrontendRequest.GetIncludeInput() { ... }
 			if req.FrontendRequest.GetIncludeOutcome() {
 				outcome, err := e.GetOutcome(ctx)
 				if err != nil {
