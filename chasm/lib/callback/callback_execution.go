@@ -182,9 +182,12 @@ func (e *CallbackExecution) Describe(ctx chasm.Context) (*callbackpb.CallbackExe
 	}
 
 	info := &callbackpb.CallbackExecutionInfo{
-		CallbackId:              e.CallbackId,
-		RunId:                   ctx.ExecutionKey().RunID,
-		Callback:                apiCb,
+		CallbackId: e.CallbackId,
+		RunId:      ctx.ExecutionKey().RunID,
+		Callback:   apiCb,
+		// QUIRK: The outcome of the CallbackExecution may have been a failure,
+		// but the Status/State may report success. (Since the callback was
+		// successfully delivered within the Temporal machineary.)
 		Status:                  callbackStatusToAPIExecutionStatus(cb.Status),
 		State:                   callbackStatusToAPIState(cb.Status),
 		Attempt:                 cb.Attempt,
@@ -201,6 +204,9 @@ func (e *CallbackExecution) Describe(ctx chasm.Context) (*callbackpb.CallbackExe
 
 // Outcome returns the callback execution outcome if the execution is in a terminal state. (Otherwise, nil.)
 func (e *CallbackExecution) GetOutcome(ctx chasm.Context) (*callbackpb.CallbackExecutionOutcome, error) {
+
+	// BUG: This is returning the Callback's outcome. But this should instead return the CallbackExecution's
+	// outcome. (That is, the CallbackExecutionState.Commpletion field.)
 	cb := e.Callback.Get(ctx)
 	switch cb.Status {
 	case callbackspb.CALLBACK_STATUS_SUCCEEDED:

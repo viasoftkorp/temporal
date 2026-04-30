@@ -345,14 +345,13 @@ func (s *StandaloneCallbackSuite) TestBasicOperation() {
 		s.Equal(fakeSvcResult.CallbackID, gotInfo.GetCallbackId())
 		s.NotNil(gotInfo.GetCreateTime())
 
-		// Verify the CallbackExecution's status is in the right terminal state.
-		if completionResult.GetSuccess() != nil {
-			s.Equal(enumspb.CALLBACK_EXECUTION_STATUS_SUCCEEDED, gotInfo.GetStatus())
-			s.Equal(enumspb.CALLBACK_STATE_SUCCEEDED, gotInfo.GetState())
-		} else {
-			s.Equal(enumspb.CALLBACK_EXECUTION_STATUS_FAILED, gotInfo.GetStatus())
-			s.Equal(enumspb.CALLBACK_STATE_FAILED, gotInfo.GetState())
-		}
+		// QUIRK: If looking at the "execution info", even a callback result that was a failure
+		// will still have STATUS_SUCCEEDED. (Since it was successfully delivered.)
+		//
+		// You need to look at the outcome (CallbackExecutionOutcome) to know whether or not
+		// the operation was a success.
+		s.Equal(enumspb.CALLBACK_EXECUTION_STATUS_SUCCEEDED, gotInfo.GetStatus())
+		s.Equal(enumspb.CALLBACK_STATE_SUCCEEDED, gotInfo.GetState())
 
 		// Poll to verify the outcome as well.
 		pollResp, err := s.FrontendClient().PollCallbackExecution(ctx, &workflowservice.PollCallbackExecutionRequest{
