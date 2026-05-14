@@ -10,6 +10,8 @@ import (
 	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
+var workflowIDCol = &sqlparser.ColName{Name: sqlparser.NewColIdent(sadefs.WorkflowID)}
+
 // RewriteScheduleIDQuery rewrites ScheduleId comparisons in the query string to WorkflowId
 // comparisons before the query reaches the visibility store converters.
 //
@@ -84,8 +86,6 @@ func rewriteComparison(exprRef *sqlparser.Expr, expr *sqlparser.ComparisonExpr, 
 	if !ok || !isSyntheticScheduleIDColumn(col, saMapper, ns) {
 		return false
 	}
-
-	workflowIDCol := &sqlparser.ColName{Name: sqlparser.NewColIdent(sadefs.WorkflowID)}
 
 	if !chasmEnabled {
 		// V1-only: prefix the value and use WorkflowId as column.

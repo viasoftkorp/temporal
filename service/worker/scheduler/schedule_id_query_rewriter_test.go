@@ -103,6 +103,12 @@ func TestRewriteScheduleIDQuery(t *testing.T) {
 			want:         "(WorkflowId = '" + prefix + "my-sched' or WorkflowId = 'my-sched')",
 		},
 		{
+			name:         "CHASM TemporalScheduleId alias OR",
+			query:        "TemporalScheduleId = 'my-sched'",
+			chasmEnabled: true,
+			want:         "(WorkflowId = '" + prefix + "my-sched' or WorkflowId = 'my-sched')",
+		},
+		{
 			name:         "CHASM starts with OR",
 			query:        "ScheduleId STARTS_WITH 'my-'",
 			chasmEnabled: true,
