@@ -16,6 +16,11 @@ const (
 
 	sqlLeftParenthesis  = '('
 	sqlRightParenthesis = ')'
+	sqlCreateKeyword    = "create"
+	sqlTableKeyword     = "table"
+	sqlIndexKeyword     = "index"
+	sqlAddKeyword       = "add"
+	sqlColumnKeyword    = "column"
 	sqlIfKeyword        = "if"
 	sqlBeginKeyword     = "begin"
 	sqlEndKeyword       = "end"
@@ -79,10 +84,16 @@ func LoadAndSplitQueryFromReaders(
 					st = st[:len(st)-1]
 
 				case sqlIfKeyword[0]:
-					if hasWordAt(contentStr, sqlIfKeyword, j) {
-						st = append(st, sqlIfKeyword[0])
-						j += len(sqlIfKeyword) - 1
+					if !hasWordAt(contentStr, sqlIfKeyword, j) {
+						continue
 					}
+					if hasWordsBefore(contentStr, j-1, sqlAddKeyword, sqlColumnKeyword) ||
+						hasWordsBefore(contentStr, j-1, sqlCreateKeyword, sqlIndexKeyword) ||
+						hasWordsBefore(contentStr, j-1, sqlCreateKeyword, sqlTableKeyword) {
+						continue
+					}
+					st = append(st, sqlIfKeyword[0])
+					j += len(sqlIfKeyword) - 1
 
 				case sqlBeginKeyword[0]:
 					if hasWordAt(contentStr, sqlBeginKeyword, j) {
@@ -181,6 +192,35 @@ func hasWordAfter(s, word string, pos int) (bool, int) {
 		return false, after
 	}
 	return hasWordAt(s, word, after), after
+}
+
+// hasWordsBefore checks if the given words appears before position pos in s,
+// separated by at least one space, and each word is a whole word.
+// Words must appear is the given order.
+// Eg: hasWordsBefore("CREATE TABLE IF", 12, "CREATE", "TABLE") returns true.
+func hasWordsBefore(s string, pos int, words ...string) bool {
+	if len(words) == 0 {
+		return true
+	}
+	if pos <= 0 || !unicode.IsSpace(rune(s[pos])) {
+		return false
+	}
+	for i := len(words) - 1; i >= 0; i-- {
+		// skip spaces
+		for pos >= 0 && unicode.IsSpace(rune(s[pos])) {
+			pos--
+		}
+		// go to first char of word
+		for pos > 0 && isAlphanumeric(s[pos-1]) {
+			pos--
+		}
+		// check if current pos matches the word
+		if pos < 0 || !hasWordAt(s, words[i], pos) {
+			return false
+		}
+		pos--
+	}
+	return true
 }
 
 func isAlphanumeric(c byte) bool {
