@@ -610,6 +610,36 @@ func TestHandleScheduleCommand(t *testing.T) {
 		require.NotNil(t, child)
 		require.EqualExportedValues(t, userMetadata, event.UserMetadata)
 	})
+
+	t.Run("attaches event group markers to the scheduled event", func(t *testing.T) {
+		tcx := newTestContext(t, defaultConfig)
+		groupMarkers := []*sdkpb.EventGroupMarker{
+			{
+				Id: "explicit-marker-id",
+				Attributes: &sdkpb.EventGroupMarker_LabelAttributes_{
+					LabelAttributes: &sdkpb.EventGroupMarker_LabelAttributes{
+						Label: &commonpb.Payload{
+							Metadata: map[string][]byte{"encoding": []byte("json/plain")},
+							Data:     []byte(`"payment"`),
+						},
+					},
+				},
+			},
+		}
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
+			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+					Endpoint:  "endpoint",
+					Service:   "service",
+					Operation: "op",
+				},
+			},
+			EventGroupMarkers: groupMarkers,
+		})
+		require.NoError(t, err)
+		require.Equal(t, 1, len(tcx.history.Events))
+		require.Equal(t, groupMarkers, tcx.history.Events[0].EventGroupMarkers)
+	})
 }
 
 func TestHandleCancelCommand(t *testing.T) {
@@ -776,6 +806,45 @@ func TestHandleCancelCommand(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, child)
 		userMetadata = nil
+	})
+
+	t.Run("attaches event group markers to the cancel-requested event", func(t *testing.T) {
+		tcx := newTestContext(t, defaultConfig)
+		tcx.ms.EXPECT().HasAnyBufferedEvent(gomock.Any()).Return(false).AnyTimes()
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
+			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+					Endpoint:  "endpoint",
+					Service:   "service",
+					Operation: "op",
+				},
+			},
+		})
+		require.NoError(t, err)
+		require.Equal(t, 1, len(tcx.history.Events))
+		scheduledEvent := tcx.history.Events[0]
+
+		groupMarkers := []*sdkpb.EventGroupMarker{
+			{
+				Id: "ufire-update-1",
+				Attributes: &sdkpb.EventGroupMarker_InboundUpdateAttributes_{
+					InboundUpdateAttributes: &sdkpb.EventGroupMarker_InboundUpdateAttributes{
+						InboundUpdateId: "fire-update-1",
+					},
+				},
+			},
+		}
+		err = tcx.cancelHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
+			Attributes: &commandpb.Command_RequestCancelNexusOperationCommandAttributes{
+				RequestCancelNexusOperationCommandAttributes: &commandpb.RequestCancelNexusOperationCommandAttributes{
+					ScheduledEventId: scheduledEvent.EventId,
+				},
+			},
+			EventGroupMarkers: groupMarkers,
+		})
+		require.NoError(t, err)
+		require.Equal(t, 2, len(tcx.history.Events))
+		require.Equal(t, groupMarkers, tcx.history.Events[1].EventGroupMarkers)
 	})
 }
 
