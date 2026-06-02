@@ -637,7 +637,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 			EventGroupMarkers: groupMarkers,
 		})
 		require.NoError(t, err)
-		require.Equal(t, 1, len(tcx.history.Events))
+		require.Len(t, tcx.history.Events, 1)
 		require.Equal(t, groupMarkers, tcx.history.Events[0].EventGroupMarkers)
 	})
 }
@@ -821,7 +821,7 @@ func TestHandleCancelCommand(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		require.Equal(t, 1, len(tcx.history.Events))
+		require.Len(t, tcx.history.Events, 1)
 		scheduledEvent := tcx.history.Events[0]
 
 		groupMarkers := []*sdkpb.EventGroupMarker{
@@ -843,7 +843,7 @@ func TestHandleCancelCommand(t *testing.T) {
 			EventGroupMarkers: groupMarkers,
 		})
 		require.NoError(t, err)
-		require.Equal(t, 2, len(tcx.history.Events))
+		require.Len(t, tcx.history.Events, 2)
 		require.Equal(t, groupMarkers, tcx.history.Events[1].EventGroupMarkers)
 	})
 }
