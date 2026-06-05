@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/deletedlqtasks"
@@ -104,6 +105,7 @@ type (
 		chasmEngine                  chasm.Engine
 		chasmRegistry                *chasm.Registry
 		nexusHandler                 nexus.Handler
+		testHooks                    testhooks.TestHooks
 
 		replicationTaskFetcherFactory    replication.TaskFetcherFactory
 		replicationTaskConverterProvider replication.SourceTaskConverterProvider
@@ -140,6 +142,7 @@ type (
 		DLQMetricsEmitter            *persistence.DLQMetricsEmitter
 		ChasmEngine                  chasm.Engine
 		ChasmRegistry                *chasm.Registry
+		TestHooks                    testhooks.TestHooks
 
 		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
 		ReplicationTaskConverterFactory replication.SourceTaskConverterProvider
@@ -2047,7 +2050,13 @@ func (h *Handler) DeleteDLQTasks(
 	ctx context.Context,
 	request *historyservice.DeleteDLQTasksRequest,
 ) (*historyservice.DeleteDLQTasksResponse, error) {
-	return deletedlqtasks.Invoke(ctx, h.taskQueueManager, request, h.taskCategoryRegistry)
+	deleteTasks := func() (*historyservice.DeleteDLQTasksResponse, error) {
+		return deletedlqtasks.Invoke(ctx, h.taskQueueManager, request, h.taskCategoryRegistry)
+	}
+	if hook, ok := testhooks.Get(h.testHooks, testhooks.HistoryTaskDLQDeleteInterceptor, testhooks.GlobalScope); ok {
+		return hook(request, deleteTasks)
+	}
+	return deleteTasks()
 }
 
 // AddTasks calls the [addtasks.Invoke] API with a [shard.Context] for the given shardID.
