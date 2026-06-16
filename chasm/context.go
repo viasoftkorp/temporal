@@ -88,6 +88,7 @@ type immutableCtx struct {
 	// But it will be when we support partial loading later,
 	// and the framework potentially needs to go to persistence to load some fields.
 	ctx context.Context
+	now *time.Time
 
 	executionKey ExecutionKey
 
@@ -98,8 +99,6 @@ type immutableCtx struct {
 
 type mutableCtx struct {
 	*immutableCtx
-
-	now **time.Time
 }
 
 // NewContext creates a new Context from an existing Context and root Node.
@@ -135,7 +134,13 @@ func (c *immutableCtx) Ref(component Component) ([]byte, error) {
 }
 
 func (c *immutableCtx) Now(component Component) time.Time {
-	return c.root.Now(component)
+	if c.now != nil {
+		return *c.now
+	}
+
+	now := c.root.Now(component)
+	c.now = &now
+	return now
 }
 
 func (c *immutableCtx) ExecutionKey() ExecutionKey {
@@ -210,26 +215,9 @@ func NewMutableContext(
 	ctx context.Context,
 	node *Node,
 ) MutableContext {
-	var now *time.Time
 	return &mutableCtx{
 		immutableCtx: newContext(ctx, node),
-		now:          &now,
 	}
-}
-
-func (c *mutableCtx) Now(component Component) time.Time {
-	if c.now == nil {
-		var now *time.Time
-		c.now = &now
-	}
-
-	if *c.now != nil {
-		return **c.now
-	}
-
-	now := c.root.Now(component)
-	*c.now = &now
-	return now
 }
 
 func (c *mutableCtx) AddTask(
@@ -241,14 +229,8 @@ func (c *mutableCtx) AddTask(
 }
 
 func (c *mutableCtx) withValue(key any, value any) Context {
-	if c.now == nil {
-		var now *time.Time
-		c.now = &now
-	}
-
 	return &mutableCtx{
 		immutableCtx: ContextWithValue(c.immutableCtx, key, value),
-		now:          c.now,
 	}
 }
 
