@@ -1204,7 +1204,7 @@ var (
 	)
 	SyncThrottlePerTaskQueueCounter                   = NewCounterDef("sync_throttle_count")
 	BufferThrottlePerTaskQueueCounter                 = NewCounterDef("buffer_throttle_count")
-	ExpiredTasksPerTaskQueueCounter                   = NewCounterDef("tasks_expired")
+	ExpiredTasksPerTaskQueueCounter                   = NewCounterDef("tasks_expired") // TODO: remove tasks_expired since it is superseded by tasks_dropped (expired_read / expired_memory reasons).
 	ForwardedPerTaskQueueCounter                      = NewCounterDef("forwarded_per_tl")
 	PriorityBacklogForwardedPerTaskQueueCounter       = NewCounterDef("priority_backlog_forwarded")
 	ForwardTaskErrorsPerTaskQueue                     = NewCounterDef("forward_task_errors")
@@ -1243,6 +1243,10 @@ var (
 	NonRetryableTasks                      = NewCounterDef(
 		"non_retryable_tasks",
 		WithDescription("The number of non-retryable matching tasks which are dropped due to specific errors"),
+	)
+	DroppedTasksCounter = NewCounterDef(
+		"tasks_dropped",
+		WithDescription("Backlog/spooled tasks dropped by matching (e.g. a Record(Workflow|Activity)TaskStarted call to history failed, the task expired, or it failed validation). Sync-match tasks are excluded. Per-task-queue, tagged with `reason` identifying the failure mode."),
 	)
 	TaskCompletedMissing = NewCounterDef(
 		"task_completed_dropped",

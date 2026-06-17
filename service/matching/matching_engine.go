@@ -780,10 +780,14 @@ pollLoop:
 		resp, err := e.recordWorkflowTaskStarted(ctx, requestClone, task)
 		if err != nil {
 			switch err := err.(type) {
-			case *serviceerror.Internal, *serviceerror.DataLoss:
+			case *serviceerror.Internal:
 				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
 				// drop the task as otherwise task would be stuck in a retry-loop
-				task.finish(nil, false)
+				task.finish(nil, false, metrics.DroppedTaskReasonInternalErrorTag)
+			case *serviceerror.DataLoss:
+				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
+				// drop the task as otherwise task would be stuck in a retry-loop
+				task.finish(nil, false, metrics.DroppedTaskReasonDataLossTag)
 			case *serviceerror.NotFound: // mutable state not found, workflow not running or workflow task not found
 				e.logger.Info("Workflow task not found",
 					tag.WorkflowTaskQueueName(taskQueueName),
@@ -795,10 +799,10 @@ pollLoop:
 					tag.WorkflowEventID(task.event.Data.GetScheduledEventId()),
 					tag.Error(err),
 				)
-				task.finish(nil, false)
+				task.finish(nil, false, metrics.DroppedTaskReasonNotFoundTag)
 			case *serviceerrors.TaskAlreadyStarted:
 				e.logger.Debug("Duplicated workflow task", tag.WorkflowTaskQueueName(taskQueueName), tag.TaskID(task.event.GetTaskId()))
-				task.finish(nil, false)
+				task.finish(nil, false, metrics.DroppedTaskReasonInvalidTag)
 			case *serviceerrors.ObsoleteDispatchBuildId:
 				// history should've scheduled another task on the right build ID. dropping this one.
 				e.logger.Info("dropping workflow task due to invalid build ID",
@@ -810,7 +814,7 @@ pollLoop:
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.BuildId(requestClone.WorkerVersionCapabilities.GetBuildId()),
 				)
-				task.finish(nil, false)
+				task.finish(nil, false, metrics.DroppedTaskReasonInvalidTag)
 			case *serviceerrors.ObsoleteMatchingTask:
 				// History should've scheduled another task on the right task queue and deployment.
 				// Dropping this one.
@@ -829,7 +833,7 @@ pollLoop:
 					tag.BuildId(worker_versioning.BuildIdFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
 					tag.Error(err),
 				)
-				task.finish(nil, false)
+				task.finish(nil, false, metrics.DroppedTaskReasonInvalidTag)
 			case *serviceerror.ResourceExhausted:
 				// If history returns one ResourceExhausted, it's likely to return more if we retry
 				// immediately. Instead, return the error to the client which will back off.
@@ -1003,10 +1007,14 @@ pollLoop:
 		resp, err := e.recordActivityTaskStarted(ctx, requestClone, task)
 		if err != nil {
 			switch err := err.(type) {
-			case *serviceerror.Internal, *serviceerror.DataLoss:
+			case *serviceerror.Internal:
 				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
 				// drop the task as otherwise task would be stuck in a retry-loop
-				task.finish(nil, false)
+				task.finish(nil, false, metrics.DroppedTaskReasonInternalErrorTag)
+			case *serviceerror.DataLoss:
+				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
+				// drop the task as otherwise task would be stuck in a retry-loop
+				task.finish(nil, false, metrics.DroppedTaskReasonDataLossTag)
 			case *serviceerror.NotFound: // mutable state not found, workflow not running or activity info not found
 				e.logger.Info("Activity task not found",
 					tag.WorkflowNamespaceID(task.event.Data.GetNamespaceId()),
@@ -1018,10 +1026,10 @@ pollLoop:
 					tag.WorkflowEventID(task.event.Data.GetScheduledEventId()),
 					tag.Error(err),
 				)
-				task.finish(nil, false)
+				task.finish(nil, false, metrics.DroppedTaskReasonNotFoundTag)
 			case *serviceerrors.TaskAlreadyStarted:
 				e.logger.Debug("Duplicated activity task", tag.WorkflowTaskQueueName(taskQueueName), tag.TaskID(task.event.GetTaskId()))
-				task.finish(nil, false)
+				task.finish(nil, false, metrics.DroppedTaskReasonInvalidTag)
 			case *serviceerrors.ObsoleteDispatchBuildId:
 				// history should've scheduled another task on the right build ID. dropping this one.
 				e.logger.Info("dropping activity task due to invalid build ID",
@@ -1033,7 +1041,7 @@ pollLoop:
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.BuildId(requestClone.WorkerVersionCapabilities.GetBuildId()),
 				)
-				task.finish(nil, false)
+				task.finish(nil, false, metrics.DroppedTaskReasonInvalidTag)
 			case *serviceerrors.ObsoleteMatchingTask:
 				// History should've scheduled another task on the right task queue and deployment.
 				// Dropping this one.
@@ -1052,7 +1060,7 @@ pollLoop:
 					tag.BuildId(worker_versioning.BuildIdFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
 					tag.Error(err),
 				)
-				task.finish(nil, false)
+				task.finish(nil, false, metrics.DroppedTaskReasonInvalidTag)
 			case *serviceerrors.ActivityStartDuringTransition:
 				// History will schedule another task once transition ends. Dropping this one.
 				e.logger.Info("dropping activity task during transition",
@@ -1069,7 +1077,7 @@ pollLoop:
 					//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
 					tag.BuildId(worker_versioning.BuildIdFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
 				)
-				task.finish(nil, false)
+				task.finish(nil, false, metrics.DroppedTaskReasonInvalidTag)
 			case *serviceerror.ResourceExhausted:
 				// If history returns one ResourceExhausted, it's likely to return more if we retry
 				// immediately. Instead, return the error to the client which will back off.

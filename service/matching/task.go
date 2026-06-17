@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -99,6 +100,10 @@ type (
 		forwardRes any // note this may be a non-nil "any" containing a nil pointer
 		forwardErr error
 		startErr   error
+		// dropReason, when non-nil, marks this task as dropped; the backlog completion
+		// callback (reader.completeTask) records it in tasks_dropped. Nil for normal
+		// completions and for sync-match tasks, which never run a completion callback.
+		dropReason *metrics.Tag
 	}
 )
 
@@ -349,15 +354,21 @@ func (task *internalTask) setEvicted() {
 // finish will be called with wasValid=false and task.recycleToken=clockedRateLimiter.RecycleToken,
 // so finish will call the rate limiter's RecycleToken to give the unused token back to any process
 // that is waiting on the token, if one exists.
-func (task *internalTask) finish(err error, wasValid bool) {
+//
+// When a backlog task is being thrown away rather than dispatched, pass a dropReason; it
+// is carried on the taskResponse and counted in tasks_dropped by the backlog completion
+// callback (reader.completeTask).
+func (task *internalTask) finish(err error, wasValid bool, dropReason ...metrics.Tag) {
 	res := taskResponse{startErr: err}
+	if len(dropReason) > 0 {
+		res.dropReason = &dropReason[0]
+	}
 	task.finishInternal(res, wasValid)
 }
 
 // finishForward must be called after forwarding a task.
 func (task *internalTask) finishForward(forwardRes any, forwardErr error, wasValid bool) {
-	res := taskResponse{forwarded: true, forwardRes: forwardRes, forwardErr: forwardErr}
-	task.finishInternal(res, wasValid)
+	task.finishInternal(taskResponse{forwarded: true, forwardRes: forwardRes, forwardErr: forwardErr}, wasValid)
 }
 
 func (task *internalTask) finishInternal(res taskResponse, wasValid bool) {

@@ -1044,7 +1044,7 @@ func FuzzMatcherData(f *testing.F) {
 					},
 					TaskId: tid,
 				}
-				md.EnqueueTaskNoWait(newInternalTaskFromBacklog(ati, nil))
+				_ = md.EnqueueTaskNoWait(newInternalTaskFromBacklog(ati, nil))
 
 			case 2: // add backlog task with priority
 				tid++
@@ -1057,7 +1057,7 @@ func FuzzMatcherData(f *testing.F) {
 					},
 					TaskId: tid,
 				}
-				md.EnqueueTaskNoWait(newInternalTaskFromBacklog(ati, nil))
+				_ = md.EnqueueTaskNoWait(newInternalTaskFromBacklog(ati, nil))
 
 			case 3: // add poller
 				timeout := randms(100)

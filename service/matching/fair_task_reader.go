@@ -128,6 +128,8 @@ func (tr *fairTaskReader) getOldestBacklogTime() time.Time {
 }
 
 func (tr *fairTaskReader) completeTask(task *internalTask, res taskResponse) {
+	recordDroppedTask(tr.backlogMgr.metricsHandler, res.dropReason)
+
 	tr.lock.Lock()
 
 	// We might have a race where mergeTasks tries to read a task from matcher (because new tasks
@@ -490,6 +492,7 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 			// readLevel calculation above and advance ackLevel + get GC'd below.
 			tr.outstandingTasks.Put(level, nil)
 			metrics.ExpiredTasksPerTaskQueueCounter.With(tr.backlogMgr.metricsHandler).Record(1, metrics.TaskExpireStageReadTag)
+			recordDroppedTask(tr.backlogMgr.metricsHandler, &metrics.DroppedTaskReasonExpiredReadTag)
 			hasExpired = true
 			continue
 		}

@@ -109,6 +109,8 @@ func (tr *priTaskReader) getOldestBacklogTime() time.Time {
 }
 
 func (tr *priTaskReader) completeTask(task *internalTask, res taskResponse) {
+	recordDroppedTask(tr.backlogMgr.metricsHandler, res.dropReason)
+
 	err := res.err()
 
 	// We can handle some transient errors by just putting the task back in the matcher to
@@ -249,6 +251,7 @@ func (tr *priTaskReader) processTaskBatch(tasks []*persistencespb.AllocatedTaskI
 		if IsTaskExpired(t) {
 			// task expired when we read it
 			metrics.ExpiredTasksPerTaskQueueCounter.With(tr.backlogMgr.metricsHandler).Record(1, metrics.TaskExpireStageReadTag)
+			recordDroppedTask(tr.backlogMgr.metricsHandler, &metrics.DroppedTaskReasonExpiredReadTag)
 			return true
 		}
 
