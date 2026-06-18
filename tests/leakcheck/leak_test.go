@@ -52,7 +52,6 @@ var goleakOpts = []goleak.Option{
 
 var objectLeakOpts = []objectleak.Option{
 	objectleak.WithPruneType("google.golang.org/protobuf/internal/impl.*"),
-	// TODO: TestEnv dependencies remain retained while teardown fixes are reverted.
 	objectleak.WithExclude("FunctionalTestBase"),
 	objectleak.WithExclude("FunctionalTestBase.Logger*"),
 	objectleak.WithExclude("FunctionalTestBase.Suite*"),
