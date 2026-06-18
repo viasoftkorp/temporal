@@ -56,7 +56,9 @@ var objectLeakOpts = []objectleak.Option{
 	objectleak.WithExclude("FunctionalTestBase"),
 	objectleak.WithExclude("FunctionalTestBase.Logger*"),
 	objectleak.WithExclude("FunctionalTestBase.Suite*"),
-	objectleak.WithExclude("FunctionalTestBase.testCluster*"),
+	objectleak.WithExclude("FunctionalTestBase.testCluster.archiverBase*"),
+	objectleak.WithExclude("FunctionalTestBase.testCluster.host*"),
+	objectleak.WithExclude("FunctionalTestBase.testCluster.testBase*"),
 	objectleak.WithExclude("FunctionalTestBase.testClusterConfig"),
 	// TODO: This is not fully garbage collected because of the goroutine leak above. Nothing to be done here.
 	objectleak.WithExclude("sdkClient*"),
