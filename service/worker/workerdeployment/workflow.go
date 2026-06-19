@@ -1746,6 +1746,7 @@ func (d *WorkflowRunner) updateMemo(ctx workflow.Context) error {
 			LatestVersionSummary:  d.getLatestVersionSummary(),
 			CurrentVersionSummary: d.getCurrentVersionSummary(),
 			RampingVersionSummary: d.getRampingVersionSummary(),
+			ValidationSummary:     computeValidationSummary(d.State.Versions),
 		},
 	})
 }
