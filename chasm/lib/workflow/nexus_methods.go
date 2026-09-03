@@ -11,12 +11,19 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	chasmworkflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
+)
+
+// Completion sources reported by this package's components; see callback.SourceVariant.
+const (
+	sourceVariantWorkflow       callback.SourceVariant = "workflow"
+	sourceVariantWorkflowUpdate callback.SourceVariant = "workflow_update"
 )
 
 var _ nexusoperation.OperationStore = (*Workflow)(nil)
@@ -263,6 +270,10 @@ func (w *Workflow) NexusOperationInvocationData(
 		Header:     attrs.GetNexusHeader(),
 		NexusLinks: []nexus.Link{nexusLink},
 	}, nil
+}
+
+func (w *Workflow) GetNexusCompletionSourceVariant() callback.SourceVariant {
+	return sourceVariantWorkflow
 }
 
 func (w *Workflow) GetNexusCompletion(

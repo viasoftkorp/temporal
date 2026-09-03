@@ -38,6 +38,9 @@ const (
 	// The validator skips the attempt check when it sees this value.
 	// 0 is safe because polled tokens always carry Count >= 1 (TransitionScheduled increments from 0).
 	ByIDTokenAttempt int32 = 0
+
+	// sourceVariantActivity is the completion source this component reports; see callback.SourceVariant.
+	sourceVariantActivity callback.SourceVariant = "activity"
 )
 
 var (
@@ -391,6 +394,10 @@ func (a *Activity) attachLinks(ctx chasm.MutableContext, links []*commonpb.Link,
 		return err
 	}
 	return ctx.SetRequestLinks(a, requestID, links)
+}
+
+func (a *Activity) GetNexusCompletionSourceVariant() callback.SourceVariant {
+	return sourceVariantActivity
 }
 
 // GetNexusCompletion returns the activity's completion data in the format required by the Nexus callback invocation.

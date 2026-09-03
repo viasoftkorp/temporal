@@ -19,6 +19,9 @@ import (
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 )
 
+// sourceVariantWorkflow is the completion source this path reports.
+const sourceVariantWorkflow = "workflow"
+
 var retryable4xxErrorTypes = []int{
 	http.StatusRequestTimeout,
 	http.StatusTooManyRequests,
@@ -50,6 +53,7 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 			tag.Destination(task.destination),
 			tag.WorkflowID(n.workflowID),
 			tag.WorkflowRunID(n.runID),
+			tag.NexusCompletionSource(sourceVariantWorkflow),
 			tag.AttemptStart(time.Now().UTC()),
 			tag.Attempt(n.attempt),
 		)
@@ -74,12 +78,23 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
 	destTag := metrics.DestinationTag(task.Destination())
 	statusCodeTag := metrics.OutcomeTag(outcomeTag(ctx, err))
-	e.MetricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, statusCodeTag)
-	e.MetricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, statusCodeTag)
+	completionSourceTag := metrics.NexusCompletionSourceTag(sourceVariantWorkflow)
+	e.MetricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, statusCodeTag, completionSourceTag)
+	e.MetricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, statusCodeTag, completionSourceTag)
 
 	if err != nil {
 		retryable := isRetryableCallError(err)
-		e.Logger.Error("Callback request failed", tag.Error(err), tag.Bool("retryable", retryable))
+		e.Logger.Error(
+			"Callback request failed",
+			tag.Error(err),
+			tag.WorkflowNamespace(ns.Name().String()),
+			tag.Destination(task.destination),
+			tag.WorkflowID(n.workflowID),
+			tag.WorkflowRunID(n.runID),
+			tag.NexusCompletionSource(sourceVariantWorkflow),
+			tag.Attempt(n.attempt),
+			tag.Bool("retryable", retryable),
+		)
 		if retryable {
 			return invocationResultRetry{err}
 		}

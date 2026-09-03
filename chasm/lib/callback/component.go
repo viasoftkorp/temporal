@@ -16,8 +16,12 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// SourceVariant names the kind of component that produced a Nexus operation completion callback.
+type SourceVariant string
+
 type CompletionSource interface {
 	GetNexusCompletion(ctx chasm.Context, requestID string) (nexusrpc.CompleteOperationOptions, error)
+	GetNexusCompletionSourceVariant() SourceVariant
 }
 
 var _ chasm.Component = (*Callback)(nil)
@@ -102,11 +106,12 @@ func (c *Callback) loadInvocationArgs(
 		}, nil
 	}
 	return invocableOutbound{
-		callback:   callback,
-		completion: completion,
-		workflowID: ctx.ExecutionKey().BusinessID,
-		runID:      ctx.ExecutionKey().RunID,
-		attempt:    c.Attempt,
+		callback:                callback,
+		completion:              completion,
+		completionSourceVariant: target.GetNexusCompletionSourceVariant(),
+		workflowID:              ctx.ExecutionKey().BusinessID,
+		runID:                   ctx.ExecutionKey().RunID,
+		attempt:                 c.Attempt,
 	}, nil
 }
 

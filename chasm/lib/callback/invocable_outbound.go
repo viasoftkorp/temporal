@@ -22,10 +22,11 @@ import (
 // invocableOutbound is an invocable that delivers the Nexus operation completion data to an external destination for
 // cross-namespace or cross-cell callbacks.
 type invocableOutbound struct {
-	callback          *callbackspb.Callback_Nexus
-	completion        nexusrpc.CompleteOperationOptions
-	workflowID, runID string
-	attempt           int32
+	callback                *callbackspb.Callback_Nexus
+	completion              nexusrpc.CompleteOperationOptions
+	completionSourceVariant SourceVariant
+	workflowID, runID       string
+	attempt                 int32
 }
 
 func (n invocableOutbound) WrapError(result invocationResult, err error) error {
@@ -49,6 +50,7 @@ func (n invocableOutbound) Invoke(
 			tag.Destination(taskAttr.Destination),
 			tag.WorkflowID(n.workflowID),
 			tag.WorkflowRunID(n.runID),
+			tag.NexusCompletionSource(string(n.completionSourceVariant)),
 			tag.AttemptStart(time.Now().UTC()),
 			tag.Attempt(n.attempt),
 		)
@@ -73,12 +75,23 @@ func (n invocableOutbound) Invoke(
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
 	destTag := metrics.DestinationTag(taskAttr.Destination)
 	outcomeTag := metrics.OutcomeTag(outcomeTag(ctx, err))
-	h.metricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, outcomeTag)
-	h.metricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, outcomeTag)
+	completionSourceTag := metrics.NexusCompletionSourceTag(string(n.completionSourceVariant))
+	h.metricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, outcomeTag, completionSourceTag)
+	h.metricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, outcomeTag, completionSourceTag)
 
 	if err != nil {
 		retryable := isRetryableCallError(err)
-		h.logger.Error("Callback request failed", tag.Error(err), tag.Bool("retryable", retryable))
+		h.logger.Error(
+			"Callback request failed",
+			tag.Error(err),
+			tag.WorkflowNamespace(ns.Name().String()),
+			tag.Destination(taskAttr.Destination),
+			tag.WorkflowID(n.workflowID),
+			tag.WorkflowRunID(n.runID),
+			tag.NexusCompletionSource(string(n.completionSourceVariant)),
+			tag.Attempt(n.attempt),
+			tag.Bool("retryable", retryable),
+		)
 		if retryable {
 			return invocationResultRetry{err}
 		}

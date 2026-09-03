@@ -143,12 +143,14 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 			counter.EXPECT().Record(int64(1),
 				metrics.NamespaceTag("namespace-name"),
 				metrics.DestinationTag("http://localhost"),
-				metrics.OutcomeTag(tc.expectedMetricOutcome))
+				metrics.OutcomeTag(tc.expectedMetricOutcome),
+				metrics.NexusCompletionSourceTag("workflow"))
 			metricsHandler.EXPECT().Timer(callbacks.RequestLatencyHistogram.Name()).Return(timer)
 			timer.EXPECT().Record(gomock.Any(),
 				metrics.NamespaceTag("namespace-name"),
 				metrics.DestinationTag("http://localhost"),
-				metrics.OutcomeTag(tc.expectedMetricOutcome))
+				metrics.OutcomeTag(tc.expectedMetricOutcome),
+				metrics.NexusCompletionSourceTag("workflow"))
 
 			root := newRoot(t)
 			cb := callbacks.Callback{

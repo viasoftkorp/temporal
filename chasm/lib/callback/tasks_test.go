@@ -51,6 +51,12 @@ func (m *mockNexusCompletionGetterComponent) GetNexusCompletion(_ chasm.Context,
 	return m.completion, m.err
 }
 
+const testSourceVariant SourceVariant = "test-source"
+
+func (m *mockNexusCompletionGetterComponent) GetNexusCompletionSourceVariant() SourceVariant {
+	return testSourceVariant
+}
+
 func (m *mockNexusCompletionGetterComponent) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	return chasm.LifecycleStateRunning
 }
@@ -162,12 +168,14 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			counter.EXPECT().Record(int64(1),
 				metrics.NamespaceTag("namespace-name"),
 				metrics.DestinationTag("http://localhost"),
-				metrics.OutcomeTag(tc.expectedMetricOutcome))
+				metrics.OutcomeTag(tc.expectedMetricOutcome),
+				metrics.NexusCompletionSourceTag(string(testSourceVariant)))
 			metricsHandler.EXPECT().Timer(RequestLatencyHistogram.Name()).Return(timer)
 			timer.EXPECT().Record(gomock.Any(),
 				metrics.NamespaceTag("namespace-name"),
 				metrics.DestinationTag("http://localhost"),
-				metrics.OutcomeTag(tc.expectedMetricOutcome))
+				metrics.OutcomeTag(tc.expectedMetricOutcome),
+				metrics.NexusCompletionSourceTag(string(testSourceVariant)))
 
 			// Setup logger
 			logger := log.NewTestLogger()

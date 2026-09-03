@@ -38,6 +38,10 @@ func (u *WorkflowUpdate) LifecycleState(
 	return chasm.LifecycleStateRunning
 }
 
+func (u *WorkflowUpdate) GetNexusCompletionSourceVariant() callback.SourceVariant {
+	return sourceVariantWorkflowUpdate
+}
+
 func (u *WorkflowUpdate) GetNexusCompletion(
 	ctx chasm.Context,
 	requestID string,
