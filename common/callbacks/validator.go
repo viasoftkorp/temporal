@@ -24,6 +24,44 @@ type Validator interface {
 	// Validate rejects callbacks that are not enabled for the execution, or are malformed.
 	// Will mutate the supplied Callbacks to normalize. e.g. converting Nexus headers to lower-case.
 	Validate(ctx context.Context, namespaceName string, cbs []*commonpb.Callback, opts ValidatorOptions) error
+
+	// ValidateSourceContextSize checks the total bytes of NexusHandler source context an execution
+	// would carry against the per-execution limit.
+	ValidateSourceContextSize(namespaceName string, bytes int) error
+}
+
+// Limits bounds what an execution's completion callbacks may carry. A request reads these once and
+// passes them down, so that a dynamic config change mid-request cannot make two checks of the same
+// limit disagree.
+type Limits struct {
+	// MaxCount is the number of callbacks one execution may have attached.
+	MaxCount int
+	// MaxSourceContextSize is the total bytes of NexusHandler source context they may carry between them.
+	MaxSourceContextSize int
+}
+
+// ValidateSourceContextSize checks bytes of NexusHandler source context against maxSize. CHASM
+// components, which re-check the limit the frontend already applied, hold a resolved maxSize and
+// call this; callers that only have a namespace use [Validator.ValidateSourceContextSize].
+func ValidateSourceContextSize(maxSize, bytes int) error {
+	if bytes > maxSize {
+		return serviceerror.NewFailedPreconditionf(
+			"cannot attach more than %d bytes of callback source_context to an execution (%d bytes requested)",
+			maxSize, bytes)
+	}
+	return nil
+}
+
+// SourceContextSize returns the total size in bytes of the NexusHandler source context payloads carried
+// by cbs. Callbacks of any other kind contribute nothing.
+func SourceContextSize(cbs []*commonpb.Callback) int {
+	total := 0
+	for _, cb := range cbs {
+		if sc := cb.GetNexusHandler().GetSourceContext(); sc != nil {
+			total += sc.Size()
+		}
+	}
+	return total
 }
 
 // ValidatorConfig holds the limits a [Validator] enforces.
@@ -37,15 +75,19 @@ type ValidatorConfig struct {
 	EndpointRules dynamicconfig.TypedPropertyFnWithNamespaceFilter[AddressMatchRules]
 
 	// NexusHandler-variant limits.
-	MaxServiceNameLength             dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxOperationNameLength           dynamicconfig.IntPropertyFnWithNamespaceFilter
-	NexusHandlerSourceContextMaxSize dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxServiceNameLength                      dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxOperationNameLength                    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NexusHandlerSourceContextMaxSize          dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NexusHandlerSourceContextAggregateMaxSize dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
 func (vc *ValidatorConfig) Validate() error {
 	var missingFields []string
 	if vc.MaxCallbacksPerExecution == nil {
 		missingFields = append(missingFields, "MaxCallbacksPerExecution")
+	}
+	if vc.MaxIDLengthLimit == nil {
+		missingFields = append(missingFields, "MaxIDLengthLimit")
 	}
 	if vc.URLMaxLength == nil {
 		missingFields = append(missingFields, "URLMaxLength")
@@ -55,6 +97,18 @@ func (vc *ValidatorConfig) Validate() error {
 	}
 	if vc.EndpointRules == nil {
 		missingFields = append(missingFields, "EndpointRules")
+	}
+	if vc.MaxServiceNameLength == nil {
+		missingFields = append(missingFields, "MaxServiceNameLength")
+	}
+	if vc.MaxOperationNameLength == nil {
+		missingFields = append(missingFields, "MaxOperationNameLength")
+	}
+	if vc.NexusHandlerSourceContextMaxSize == nil {
+		missingFields = append(missingFields, "NexusHandlerSourceContextMaxSize")
+	}
+	if vc.NexusHandlerSourceContextAggregateMaxSize == nil {
+		missingFields = append(missingFields, "NexusHandlerSourceContextAggregateMaxSize")
 	}
 
 	if len(missingFields) != 0 {
@@ -184,4 +238,8 @@ func (v *validator) validateNexusHandler(namespaceName string, cb *commonpb.Call
 	}
 
 	return nil
+}
+
+func (v *validator) ValidateSourceContextSize(namespaceName string, bytes int) error {
+	return ValidateSourceContextSize(v.config.NexusHandlerSourceContextAggregateMaxSize(namespaceName), bytes)
 }
