@@ -50,18 +50,6 @@ type Validator interface {
 	ValidateAdditions(namespaceName string, cbs []*commonpb.Callback, opts AdditionOptions) error
 }
 
-// SourceContextSize returns the total size in bytes of the NexusHandler source context payloads carried
-// by cbs. Callbacks of any other kind contribute nothing.
-func SourceContextSize(cbs []*commonpb.Callback) int {
-	total := 0
-	for _, cb := range cbs {
-		if sc := cb.GetNexusHandler().GetSourceContext(); sc != nil {
-			total += sc.Size()
-		}
-	}
-	return total
-}
-
 // ValidatorConfig holds the limits a [Validator] enforces.
 type ValidatorConfig struct {
 	MaxCallbacksPerExecution dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -149,7 +137,7 @@ func (v *validator) Validate(
 	}
 
 	// validateNexusHandler bounds each callback's source context individually; this bounds the total.
-	return v.validateSourceContextSize(namespaceName, SourceContextSize(cbs))
+	return v.validateSourceContextSize(namespaceName, sumNexusHandlerSourceContextSize(cbs))
 }
 
 // ValidateAdditions bounds cbs against what the execution already carries. See [Validator].
@@ -167,7 +155,7 @@ func (v *validator) ValidateAdditions(
 	}
 	return v.validateSourceContextSize(
 		namespaceName,
-		SourceContextSize(cbs)+opts.CurrentTotalNexusHandlerCallbackSourceContextSize,
+		sumNexusHandlerSourceContextSize(cbs)+opts.CurrentTotalNexusHandlerCallbackSourceContextSize,
 	)
 }
 
@@ -269,4 +257,16 @@ func (v *validator) validateNexusHandler(namespaceName string, cb *commonpb.Call
 	}
 
 	return nil
+}
+
+// sumNexusHandlerSourceContextSize returns the total size in bytes of the NexusHandler source context payloads carried
+// by cbs. Callbacks of any other kind contribute nothing.
+func sumNexusHandlerSourceContextSize(cbs []*commonpb.Callback) int {
+	total := 0
+	for _, cb := range cbs {
+		if sc := cb.GetNexusHandler().GetSourceContext(); sc != nil {
+			total += sc.Size()
+		}
+	}
+	return total
 }
