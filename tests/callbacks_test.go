@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -326,13 +327,12 @@ func (s *CallbacksSuite) TestWorkflowCallbacks_TotalSizeExceeded(opts []testcore
 	env := s.newTestEnv(opts...)
 	env.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
 	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true)
-	env.OverrideDynamicConfig(callback.TotalMaxSizePerExecution, 50)
+	env.OverrideDynamicConfig(callback.TotalMaxSizePerExecution, 123)
 
-	cbs := make([]*commonpb.Callback, 0, 3)
-	for _, url := range []string{"http://url-1/callback", "http://url-2/callback", "http://url-3/callback"} {
-		cbs = append(cbs, &commonpb.Callback{
-			Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: url}},
-		})
+	cbs := make([]*commonpb.Callback, 3)
+	for idx := range cbs {
+		url := fmt.Sprintf("https://example.com/completion-callback/%d", idx)
+		cbs[idx] = nexusCompletionCallback(url)
 	}
 	_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
@@ -346,7 +346,7 @@ func (s *CallbacksSuite) TestWorkflowCallbacks_TotalSizeExceeded(opts []testcore
 	})
 	var failedPrecondition *serviceerror.FailedPrecondition
 	s.ErrorAs(err, &failedPrecondition)
-	s.ErrorContains(err, "cannot attach more than 50 bytes of callbacks to an execution")
+	s.ErrorContains(err, "cannot attach more than 123 bytes of callbacks to an execution")
 }
 
 func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver(opts []testcore.TestOption) {
