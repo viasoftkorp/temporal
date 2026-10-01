@@ -377,6 +377,9 @@ func (e *taskExecutorImpl) filterTask(
 		}
 		return false, err
 	}
+	if !namespaceEntry.IsGlobalNamespace() {
+		return false, nil
+	}
 
 	shouldProcessTask := false
 FilterLoop:

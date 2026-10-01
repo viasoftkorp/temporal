@@ -174,6 +174,9 @@ func (h *taskExecutorImpl) shouldProcessTask(ctx context.Context, task *replicat
 				tag.String("Task Namespace Info Id", task.Info.GetId()))
 			return false, ErrNameUUIDCollision
 		}
+		if !resp.IsGlobalNamespace {
+			return false, nil
+		}
 
 		return true, nil
 	case *serviceerror.NamespaceNotFound:

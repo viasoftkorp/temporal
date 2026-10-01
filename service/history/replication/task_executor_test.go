@@ -141,6 +141,16 @@ func (s *taskExecutorSuite) TestFilterTask_NotApply() {
 	s.False(ok)
 }
 
+func (s *taskExecutorSuite) TestFilterTask_LocalNamespaceNotApply() {
+	namespaceID := namespace.ID(uuid.NewString())
+	s.mockNamespaceCache.EXPECT().
+		GetNamespaceByID(namespaceID).
+		Return(namespace.NewLocalNamespaceForTest(nil, nil, cluster.TestCurrentClusterName), nil)
+	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, "test-workflow-id", false)
+	s.NoError(err)
+	s.False(ok)
+}
+
 func (s *taskExecutorSuite) TestFilterTask_Error() {
 	namespaceID := namespace.ID(uuid.NewString())
 	s.mockNamespaceCache.EXPECT().
