@@ -52,6 +52,37 @@ func TestComputeConfigScalingGroupsToWCISpec_WithComputeAndScaling(t *testing.T)
 	assert.Nil(t, g2.Scaling, "no scaler means nil scaling spec")
 }
 
+func TestComputeConfigRegionIdsRoundTrip(t *testing.T) {
+	t.Parallel()
+	regions := []string{"aws-us-east-1", "aws-us-west-2"}
+	groups := map[string]*computepb.ComputeConfigScalingGroup{
+		"regional": {
+			TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+			RegionIds:      regions,
+			Provider:       &computepb.ComputeProvider{Type: "aws-lambda"},
+		},
+		"global": {
+			Provider: &computepb.ComputeProvider{Type: "aws-lambda"},
+		},
+	}
+
+	spec := computeConfigScalingGroupsToWCISpec(groups)
+	assert.Equal(t, regions, spec.ScalingGroupSpecs["regional"].RegionIds)
+	assert.Empty(t, spec.ScalingGroupSpecs["global"].RegionIds)
+
+	updates := scalingGroupUpdatesToWCI(scalingGroupsToUpsertUpdates(groups))
+	assert.Equal(t, regions, updates["regional"].Spec.RegionIds)
+	assert.Empty(t, updates["global"].Spec.RegionIds)
+
+	config := wciSpecToComputeConfig(spec)
+	assert.Equal(t, regions, config.GetScalingGroups()["regional"].GetRegionIds())
+	assert.Empty(t, config.GetScalingGroups()["global"].GetRegionIds())
+
+	summary := wciSpecToComputeConfigSummary(spec)
+	assert.Equal(t, regions, summary.GetScalingGroups()["regional"].GetRegionIds())
+	assert.Empty(t, summary.GetScalingGroups()["global"].GetRegionIds())
+}
+
 func TestWciValidationStatusToComputeStatus_Nil(t *testing.T) {
 	t.Parallel()
 	require.Nil(t, wciValidationStatusToComputeStatus(nil))
