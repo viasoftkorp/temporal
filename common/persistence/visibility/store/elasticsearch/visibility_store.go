@@ -1535,8 +1535,8 @@ func (s *VisibilityStore) AddSearchAttributes(
 	return err
 }
 
-// ListExecutions implements [store.AdminVisibilityStore].
-func (s *VisibilityStore) ListExecutions(
+// AdminListExecutions implements [store.AdminVisibilityStore].
+func (s *VisibilityStore) AdminListExecutions(
 	ctx context.Context,
 	request *manager.AdminListExecutionsRequest,
 ) (*store.InternalListExecutionsResponse, error) {
@@ -1585,8 +1585,8 @@ func (s *VisibilityStore) ListExecutions(
 	return s.GetListWorkflowExecutionsResponse(searchResult, request.PageSize, nil)
 }
 
-// CountExecutions implements [store.AdminVisibilityStore].
-func (s *VisibilityStore) CountExecutions(
+// AdminCountExecutions implements [store.AdminVisibilityStore].
+func (s *VisibilityStore) AdminCountExecutions(
 	ctx context.Context,
 	request *manager.AdminCountExecutionsRequest,
 ) (*store.InternalCountExecutionsResponse, error) {

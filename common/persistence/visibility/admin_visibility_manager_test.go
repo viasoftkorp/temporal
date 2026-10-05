@@ -11,7 +11,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -50,10 +50,10 @@ func TestVisibilityManagerImpl_AdminAPIs_StoreNotAdmin(t *testing.T) {
 		namespace.NewMockRegistry(ctrl),
 	)
 
-	_, err := visManager.ListExecutions(context.Background(), &manager.AdminListExecutionsRequest{})
+	_, err := visManager.AdminListExecutions(context.Background(), &manager.AdminListExecutionsRequest{})
 	require.ErrorIs(t, err, manager.ErrNotAdminVisibilityStore)
 
-	_, err = visManager.CountExecutions(context.Background(), &manager.AdminCountExecutionsRequest{})
+	_, err = visManager.AdminCountExecutions(context.Background(), &manager.AdminCountExecutionsRequest{})
 	require.ErrorIs(t, err, manager.ErrNotAdminVisibilityStore)
 }
 
@@ -72,7 +72,7 @@ func TestVisibilityManagerImpl_ListExecutions(t *testing.T) {
 		Query:    "ExecutionStatus = 'Completed'",
 		PageSize: 10,
 	}
-	visStore.EXPECT().ListExecutions(gomock.Any(), request).Return(
+	visStore.EXPECT().AdminListExecutions(gomock.Any(), request).Return(
 		&store.InternalListExecutionsResponse{
 			Executions: []*store.InternalExecutionInfo{
 				{
@@ -116,32 +116,26 @@ func TestVisibilityManagerImpl_ListExecutions(t *testing.T) {
 		GetNamespaceName(deletedNamespaceID).
 		Return(namespace.EmptyName, serviceerror.NewNamespaceNotFound(deletedNamespaceID.String()))
 
-	resp, err := visManager.ListExecutions(context.Background(), request)
+	resp, err := visManager.AdminListExecutions(context.Background(), request)
 	require.NoError(t, err)
 	require.Equal(t, []byte("next-page-token"), resp.NextPageToken)
 	protorequire.ProtoSliceEqual(
 		t,
-		[]*persistencespb.VisibilityExecutionInfo{
+		[]*adminservice.VisibilityExecutionInfo{
 			{
 				NamespaceId: testNamespaceUUID.String(),
 				Namespace:   testNamespace.String(),
-				Execution: &commonpb.WorkflowExecution{
-					WorkflowId: "running-wid",
-					RunId:      "running-rid",
-				},
-				WorkflowType: &commonpb.WorkflowType{Name: "test-workflow-type"},
-				Status:       enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-				StartTime:    timestamppb.New(startTime),
+				BusinessId:  "running-wid",
+				RunId:       "running-rid",
+				State:       enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+				StartTime:   timestamppb.New(startTime),
 			},
 			{
-				NamespaceId: deletedNamespaceID.String(),
-				Namespace:   "",
-				Execution: &commonpb.WorkflowExecution{
-					WorkflowId: "closed-wid",
-					RunId:      "closed-rid",
-				},
-				WorkflowType:         &commonpb.WorkflowType{Name: "test-workflow-type"},
-				Status:               enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+				NamespaceId:          deletedNamespaceID.String(),
+				Namespace:            "",
+				BusinessId:           "closed-wid",
+				RunId:                "closed-rid",
+				State:                enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 				StartTime:            timestamppb.New(startTime),
 				CloseTime:            timestamppb.New(closeTime),
 				ExecutionDuration:    durationpb.New(time.Minute),
@@ -161,9 +155,9 @@ func TestVisibilityManagerImpl_ListExecutions_StoreError(t *testing.T) {
 	visManager := newTestAdminVisibilityManager(visStore, namespace.NewMockRegistry(ctrl))
 
 	storeErr := errors.New("store error")
-	visStore.EXPECT().ListExecutions(gomock.Any(), gomock.Any()).Return(nil, storeErr)
+	visStore.EXPECT().AdminListExecutions(gomock.Any(), gomock.Any()).Return(nil, storeErr)
 
-	_, err := visManager.ListExecutions(
+	_, err := visManager.AdminListExecutions(
 		context.Background(),
 		&manager.AdminListExecutionsRequest{PageSize: 10},
 	)
@@ -212,9 +206,9 @@ func TestVisibilityManagerImpl_CountExecutions(t *testing.T) {
 			visManager := newTestAdminVisibilityManager(visStore, namespace.NewMockRegistry(ctrl))
 
 			request := &manager.AdminCountExecutionsRequest{Query: "GROUP BY ExecutionStatus"}
-			visStore.EXPECT().CountExecutions(gomock.Any(), request).Return(tc.storeResp, nil)
+			visStore.EXPECT().AdminCountExecutions(gomock.Any(), request).Return(tc.storeResp, nil)
 
-			resp, err := visManager.CountExecutions(context.Background(), request)
+			resp, err := visManager.AdminCountExecutions(context.Background(), request)
 			require.NoError(t, err)
 			require.Equal(t, tc.want.Count, resp.Count)
 			protorequire.ProtoSliceEqual(t, tc.want.Groups, resp.Groups)
@@ -229,9 +223,9 @@ func TestVisibilityManagerImpl_CountExecutions_StoreError(t *testing.T) {
 	visManager := newTestAdminVisibilityManager(visStore, namespace.NewMockRegistry(ctrl))
 
 	storeErr := errors.New("store error")
-	visStore.EXPECT().CountExecutions(gomock.Any(), gomock.Any()).Return(nil, storeErr)
+	visStore.EXPECT().AdminCountExecutions(gomock.Any(), gomock.Any()).Return(nil, storeErr)
 
-	_, err := visManager.CountExecutions(
+	_, err := visManager.AdminCountExecutions(
 		context.Background(),
 		&manager.AdminCountExecutionsRequest{},
 	)
@@ -255,26 +249,26 @@ func TestVisibilityManagerDual_AdminAPIs(t *testing.T) {
 	listRequest := &manager.AdminListExecutionsRequest{Namespace: testNamespace}
 	listResponse := &manager.AdminListExecutionsResponse{NextPageToken: []byte("token")}
 	selector.EXPECT().readManager(testNamespace).Return(adminManager)
-	adminManager.EXPECT().ListExecutions(gomock.Any(), listRequest).Return(listResponse, nil)
-	gotList, err := visManager.ListExecutions(context.Background(), listRequest)
+	adminManager.EXPECT().AdminListExecutions(gomock.Any(), listRequest).Return(listResponse, nil)
+	gotList, err := visManager.AdminListExecutions(context.Background(), listRequest)
 	require.NoError(t, err)
 	require.Equal(t, listResponse, gotList)
 
 	countRequest := &manager.AdminCountExecutionsRequest{Namespace: testNamespace}
 	countResponse := &manager.AdminCountExecutionsResponse{Count: 10}
 	selector.EXPECT().readManager(testNamespace).Return(adminManager)
-	adminManager.EXPECT().CountExecutions(gomock.Any(), countRequest).Return(countResponse, nil)
-	gotCount, err := visManager.CountExecutions(context.Background(), countRequest)
+	adminManager.EXPECT().AdminCountExecutions(gomock.Any(), countRequest).Return(countResponse, nil)
+	gotCount, err := visManager.AdminCountExecutions(context.Background(), countRequest)
 	require.NoError(t, err)
 	require.Equal(t, countResponse, gotCount)
 
 	// The selected read manager doesn't support the admin visibility APIs.
 	selector.EXPECT().readManager(testNamespace).Return(primary)
-	_, err = visManager.ListExecutions(context.Background(), listRequest)
+	_, err = visManager.AdminListExecutions(context.Background(), listRequest)
 	require.ErrorIs(t, err, manager.ErrNotAdminVisibilityManager)
 
 	selector.EXPECT().readManager(testNamespace).Return(primary)
-	_, err = visManager.CountExecutions(context.Background(), countRequest)
+	_, err = visManager.AdminCountExecutions(context.Background(), countRequest)
 	require.ErrorIs(t, err, manager.ErrNotAdminVisibilityManager)
 }
 
@@ -291,17 +285,17 @@ func TestVisibilityManagerRateLimited_AdminAPIs(t *testing.T) {
 
 	listRequest := &manager.AdminListExecutionsRequest{Namespace: testNamespace}
 	listResponse := &manager.AdminListExecutionsResponse{NextPageToken: []byte("token")}
-	delegate.EXPECT().ListExecutions(gomock.Any(), listRequest).Return(listResponse, nil)
-	gotList, err := visManager.ListExecutions(context.Background(), listRequest)
+	delegate.EXPECT().AdminListExecutions(gomock.Any(), listRequest).Return(listResponse, nil)
+	gotList, err := visManager.AdminListExecutions(context.Background(), listRequest)
 	require.NoError(t, err)
 	require.Equal(t, listResponse, gotList)
 
 	// No remaining tokens: the read rate limiter rejects before reaching the delegate.
-	_, err = visManager.ListExecutions(context.Background(), listRequest)
+	_, err = visManager.AdminListExecutions(context.Background(), listRequest)
 	require.ErrorIs(t, err, persistence.ErrPersistenceSystemLimitExceeded)
 
 	countRequest := &manager.AdminCountExecutionsRequest{Namespace: testNamespace}
-	_, err = visManager.CountExecutions(context.Background(), countRequest)
+	_, err = visManager.AdminCountExecutions(context.Background(), countRequest)
 	require.ErrorIs(t, err, persistence.ErrPersistenceSystemLimitExceeded)
 }
 
@@ -315,10 +309,10 @@ func TestVisibilityManagerRateLimited_AdminAPIs_DelegateNotAdmin(t *testing.T) {
 		dynamicconfig.GetFloatPropertyFn(0.2),
 	)
 
-	_, err := visManager.ListExecutions(context.Background(), &manager.AdminListExecutionsRequest{})
+	_, err := visManager.AdminListExecutions(context.Background(), &manager.AdminListExecutionsRequest{})
 	require.ErrorIs(t, err, manager.ErrNotAdminVisibilityManager)
 
-	_, err = visManager.CountExecutions(context.Background(), &manager.AdminCountExecutionsRequest{})
+	_, err = visManager.AdminCountExecutions(context.Background(), &manager.AdminCountExecutionsRequest{})
 	require.ErrorIs(t, err, manager.ErrNotAdminVisibilityManager)
 }
 
@@ -330,15 +324,15 @@ func TestVisibilityManagerMetrics_AdminAPIs(t *testing.T) {
 
 	listRequest := &manager.AdminListExecutionsRequest{Namespace: testNamespace}
 	listResponse := &manager.AdminListExecutionsResponse{NextPageToken: []byte("token")}
-	delegate.EXPECT().ListExecutions(gomock.Any(), listRequest).Return(listResponse, nil)
-	gotList, err := visManager.ListExecutions(context.Background(), listRequest)
+	delegate.EXPECT().AdminListExecutions(gomock.Any(), listRequest).Return(listResponse, nil)
+	gotList, err := visManager.AdminListExecutions(context.Background(), listRequest)
 	require.NoError(t, err)
 	require.Equal(t, listResponse, gotList)
 
 	countRequest := &manager.AdminCountExecutionsRequest{Namespace: testNamespace}
 	countResponse := &manager.AdminCountExecutionsResponse{Count: 10}
-	delegate.EXPECT().CountExecutions(gomock.Any(), countRequest).Return(countResponse, nil)
-	gotCount, err := visManager.CountExecutions(context.Background(), countRequest)
+	delegate.EXPECT().AdminCountExecutions(gomock.Any(), countRequest).Return(countResponse, nil)
+	gotCount, err := visManager.AdminCountExecutions(context.Background(), countRequest)
 	require.NoError(t, err)
 	require.Equal(t, countResponse, gotCount)
 }
@@ -348,10 +342,10 @@ func TestVisibilityManagerMetrics_AdminAPIs_DelegateNotAdmin(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	visManager := newTestVisibilityManagerMetrics(manager.NewMockVisibilityManager(ctrl))
 
-	_, err := visManager.ListExecutions(context.Background(), &manager.AdminListExecutionsRequest{})
+	_, err := visManager.AdminListExecutions(context.Background(), &manager.AdminListExecutionsRequest{})
 	require.ErrorIs(t, err, manager.ErrNotAdminVisibilityManager)
 
-	_, err = visManager.CountExecutions(context.Background(), &manager.AdminCountExecutionsRequest{})
+	_, err = visManager.AdminCountExecutions(context.Background(), &manager.AdminCountExecutionsRequest{})
 	require.ErrorIs(t, err, manager.ErrNotAdminVisibilityManager)
 }
 

@@ -14,7 +14,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	chasmspb "go.temporal.io/server/api/chasm/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
@@ -354,11 +354,16 @@ func (p *visibilityManagerImpl) AddSearchAttributes(
 	ctx context.Context,
 	request *manager.AddSearchAttributesRequest,
 ) error {
-	return p.store.AddSearchAttributes(ctx, request)
+	adminStore, ok := p.store.(store.AdminVisibilityStore)
+	if !ok {
+		return manager.ErrNotAdminVisibilityStore
+	}
+
+	return adminStore.AddSearchAttributes(ctx, request)
 }
 
-// ListExecutions implements [manager.AdminVisibilityManager].
-func (p *visibilityManagerImpl) ListExecutions(
+// AdminListExecutions implements [manager.AdminVisibilityManager].
+func (p *visibilityManagerImpl) AdminListExecutions(
 	ctx context.Context,
 	request *manager.AdminListExecutionsRequest,
 ) (*manager.AdminListExecutionsResponse, error) {
@@ -367,13 +372,13 @@ func (p *visibilityManagerImpl) ListExecutions(
 		return nil, manager.ErrNotAdminVisibilityStore
 	}
 
-	storeResp, err := adminStore.ListExecutions(ctx, request)
+	storeResp, err := adminStore.AdminListExecutions(ctx, request)
 	if err != nil {
 		return nil, err
 	}
 
 	resp := &manager.AdminListExecutionsResponse{
-		Executions:    make([]*persistencespb.VisibilityExecutionInfo, 0, len(storeResp.Executions)),
+		Executions:    make([]*adminservice.VisibilityExecutionInfo, 0, len(storeResp.Executions)),
 		NextPageToken: storeResp.NextPageToken,
 	}
 	for _, storeExecution := range storeResp.Executions {
@@ -389,18 +394,13 @@ func (p *visibilityManagerImpl) ListExecutions(
 			nsName = namespace.EmptyName
 		}
 
-		execInfo := &persistencespb.VisibilityExecutionInfo{
+		execInfo := &adminservice.VisibilityExecutionInfo{
 			NamespaceId: storeExecution.NamespaceID,
 			Namespace:   nsName.String(),
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: storeExecution.WorkflowID,
-				RunId:      storeExecution.RunID,
-			},
-			WorkflowType: &commonpb.WorkflowType{
-				Name: storeExecution.TypeName,
-			},
-			Status:    storeExecution.Status,
-			StartTime: timestamppb.New(storeExecution.StartTime),
+			BusinessId:  storeExecution.WorkflowID,
+			RunId:       storeExecution.RunID,
+			State:       statusToState(storeExecution.Status),
+			StartTime:   timestamppb.New(storeExecution.StartTime),
 		}
 		if storeExecution.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 			execInfo.CloseTime = timestamppb.New(storeExecution.CloseTime)
@@ -414,8 +414,8 @@ func (p *visibilityManagerImpl) ListExecutions(
 	return resp, nil
 }
 
-// CountExecutions implements [manager.AdminVisibilityManager].
-func (p *visibilityManagerImpl) CountExecutions(
+// AdminCountExecutions implements [manager.AdminVisibilityManager].
+func (p *visibilityManagerImpl) AdminCountExecutions(
 	ctx context.Context,
 	request *manager.AdminCountExecutionsRequest,
 ) (*manager.AdminCountExecutionsResponse, error) {
@@ -424,7 +424,7 @@ func (p *visibilityManagerImpl) CountExecutions(
 		return nil, manager.ErrNotAdminVisibilityStore
 	}
 
-	storeResp, err := adminStore.CountExecutions(ctx, request)
+	storeResp, err := adminStore.AdminCountExecutions(ctx, request)
 	if err != nil {
 		return nil, err
 	}
@@ -712,4 +712,23 @@ func aliasChasmSearchAttributes(
 	}
 
 	return result, nil
+}
+
+// statusToState is best effort translation of execution status to execution state
+// since there is no 1-1 mapping between them.
+func statusToState(status enumspb.WorkflowExecutionStatus) enumsspb.WorkflowExecutionState {
+	switch status {
+	case enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED:
+		return enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
+	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
+		return enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	default:
+		return enumsspb.WORKFLOW_EXECUTION_STATE_UNSPECIFIED
+	}
 }

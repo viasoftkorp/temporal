@@ -95,6 +95,8 @@ var (
 		api.WorkflowServicePrefix + "CountWorkflowExecutions":        {},
 		api.WorkflowServicePrefix + "ListSchedules":                  {},
 		api.WorkflowServicePrefix + "ListBatchOperations":            {},
+		api.WorkflowServicePrefix + "ListExecutions":                 {},
+		api.WorkflowServicePrefix + "CountExecutions":                {},
 		// Matching
 		api.WorkflowServicePrefix + "ShutdownWorker": {},
 	}

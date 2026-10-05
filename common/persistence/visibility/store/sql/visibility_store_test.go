@@ -260,7 +260,7 @@ func TestListExecutions(t *testing.T) {
 					return []sqlplugin.VisibilityRow{row}, nil
 				})
 
-			resp, err := visStore.ListExecutions(
+			resp, err := visStore.AdminListExecutions(
 				context.Background(),
 				&manager.AdminListExecutionsRequest{
 					Namespace: tc.nsName,
@@ -306,7 +306,7 @@ func TestListExecutions_NamespaceNotFound(t *testing.T) {
 	nsRegistry.EXPECT().GetNamespaceID(testNamespaceName).Return(namespace.EmptyID, nsNotFoundErr)
 	visStore.namespaceRegistry = nsRegistry
 
-	_, err := visStore.ListExecutions(
+	_, err := visStore.AdminListExecutions(
 		context.Background(),
 		&manager.AdminListExecutionsRequest{Namespace: testNamespaceName, PageSize: 10},
 	)
@@ -360,7 +360,7 @@ func TestCountExecutions(t *testing.T) {
 					return int64(42), nil
 				})
 
-			resp, err := visStore.CountExecutions(
+			resp, err := visStore.AdminCountExecutions(
 				context.Background(),
 				&manager.AdminCountExecutionsRequest{
 					Namespace: tc.nsName,
@@ -385,7 +385,7 @@ func TestCountExecutions_NamespaceNotFound(t *testing.T) {
 	nsRegistry.EXPECT().GetNamespaceID(testNamespaceName).Return(namespace.EmptyID, nsNotFoundErr)
 	visStore.namespaceRegistry = nsRegistry
 
-	_, err := visStore.CountExecutions(
+	_, err := visStore.AdminCountExecutions(
 		context.Background(),
 		&manager.AdminCountExecutionsRequest{Namespace: testNamespaceName},
 	)
