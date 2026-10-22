@@ -43,7 +43,8 @@ type EventStore struct {
 	// scheduled to started event ID mapping
 	scheduledIDToStartedID map[int64]int64
 	// request id to event ID mapping
-	requestIDToEventID map[string]int64
+	requestIDToEventID     map[RequestEventKey]int64
+	updateCallbackEventIDs map[UpdateCallbackRequestKey]int64
 
 	metricsHandler metrics.Handler
 }
@@ -164,9 +165,9 @@ func (b *EventStore) SizeInBytesOfBufferedEvents() int {
 	return size
 }
 
-func (b *EventStore) FlushBufferToCurrentBatch() (map[int64]int64, map[string]int64) {
+func (b *EventStore) FlushBufferToCurrentBatch() (map[int64]int64, map[RequestEventKey]int64, map[UpdateCallbackRequestKey]int64) {
 	if len(b.dbBufferBatch) == 0 && len(b.memBufferBatch) == 0 {
-		return b.scheduledIDToStartedID, b.requestIDToEventID
+		return b.scheduledIDToStartedID, b.requestIDToEventID, b.updateCallbackEventIDs
 	}
 
 	b.assertMutable()
@@ -178,7 +179,7 @@ func (b *EventStore) FlushBufferToCurrentBatch() (map[int64]int64, map[string]in
 		// above will generate 2 then 1
 		b.dbBufferBatch = nil
 		b.memBufferBatch = nil
-		return b.scheduledIDToStartedID, b.requestIDToEventID
+		return b.scheduledIDToStartedID, b.requestIDToEventID, b.updateCallbackEventIDs
 	}
 
 	b.dbClearBuffer = b.dbClearBuffer || len(b.dbBufferBatch) > 0
@@ -202,7 +203,7 @@ func (b *EventStore) FlushBufferToCurrentBatch() (map[int64]int64, map[string]in
 		b.appendToLatestBatch(event)
 	}
 
-	return b.scheduledIDToStartedID, b.requestIDToEventID
+	return b.scheduledIDToStartedID, b.requestIDToEventID, b.updateCallbackEventIDs
 }
 
 func (b *EventStore) FlushAndCreateNewBatch() {
@@ -224,7 +225,7 @@ func (b *EventStore) Finish(
 	}()
 
 	if flushBufferEvent {
-		_, _ = b.FlushBufferToCurrentBatch()
+		b.FlushBufferToCurrentBatch()
 	}
 	b.FlushAndCreateNewBatch()
 
@@ -235,6 +236,7 @@ func (b *EventStore) Finish(
 	memBufferBatch = append(memBufferBatch, dbBufferBatch...)
 	scheduledIDToStartedID := b.scheduledIDToStartedID
 	requestIDToEventID := b.requestIDToEventID
+	updateCallbackEventIDs := b.updateCallbackEventIDs
 
 	b.memEventsBatches = nil
 	b.memBufferBatch = nil
@@ -243,6 +245,7 @@ func (b *EventStore) Finish(
 	b.dbClearBuffer = false
 	b.dbBufferBatch = nil
 	b.scheduledIDToStartedID = nil
+	b.updateCallbackEventIDs = nil
 
 	if err := b.assignTaskIDs(dbEventsBatches); err != nil {
 		return nil, err
@@ -255,6 +258,7 @@ func (b *EventStore) Finish(
 		MemBufferBatch:         memBufferBatch,
 		ScheduledIDToStartedID: scheduledIDToStartedID,
 		RequestIDToEventID:     requestIDToEventID,
+		UpdateCallbackEventIDs: updateCallbackEventIDs,
 	}, nil
 }
 
@@ -447,21 +451,44 @@ func (b *EventStore) wireEventIDs(
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED:
 			attributes := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
 			if attributes.GetAttachedRequestId() != "" {
-				b.requestIDToEventID[attributes.AttachedRequestId] = event.GetEventId()
+				b.requestIDToEventID[RequestEventKey{RequestID: attributes.GetAttachedRequestId(), EventType: event.GetEventType()}] = event.GetEventId()
 			}
 			// Request IDs of duplicate updates are recorded per update, not on the event.
 			for _, updateOptions := range attributes.GetWorkflowUpdateOptions() {
-				if updateOptions.GetAttachedRequestId() != "" {
-					b.requestIDToEventID[updateOptions.AttachedRequestId] = event.GetEventId()
-				}
+				b.recordUpdateAttachmentEventID(event, updateOptions.GetUpdateId(), updateOptions.GetAttachedRequestId(), len(updateOptions.GetAttachedCompletionCallbacks()) > 0)
 			}
+
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED:
+			request := event.GetWorkflowExecutionUpdateAdmittedEventAttributes().GetRequest()
+			b.recordUpdateAttachmentEventID(event, request.GetMeta().GetUpdateId(), request.GetRequestId(), len(request.GetCompletionCallbacks()) > 0)
 
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 			attributes := event.GetWorkflowExecutionSignaledEventAttributes()
 			if attributes.GetRequestId() != "" {
-				b.requestIDToEventID[attributes.RequestId] = event.GetEventId()
+				b.requestIDToEventID[RequestEventKey{RequestID: attributes.GetRequestId(), EventType: event.GetEventType()}] = event.GetEventId()
 			}
 		}
+	}
+}
+
+func (b *EventStore) recordUpdateAttachmentEventID(event *historypb.HistoryEvent, updateID, requestID string, hasCallbacks bool) {
+	if requestID == "" {
+		return
+	}
+	legacyKey := RequestEventKey{RequestID: requestID, EventType: event.GetEventType()}
+	if _, exists := b.requestIDToEventID[legacyKey]; !exists {
+		b.requestIDToEventID[legacyKey] = event.GetEventId()
+	}
+	if !hasCallbacks {
+		return
+	}
+	if b.updateCallbackEventIDs == nil {
+		b.updateCallbackEventIDs = make(map[UpdateCallbackRequestKey]int64)
+	}
+	key := UpdateCallbackRequestKey{UpdateID: updateID, RequestID: requestID}
+	// Attachment deduplication keeps the first event for this Update and request.
+	if _, exists := b.updateCallbackEventIDs[key]; !exists {
+		b.updateCallbackEventIDs[key] = event.GetEventId()
 	}
 }
 

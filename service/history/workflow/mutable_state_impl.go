@@ -740,15 +740,22 @@ func (ms *MutableStateImpl) chasmCallbacksEnabled() bool {
 	return ms.shard.GetConfig().EnableCHASMCallbacks(ms.GetNamespaceEntry().Name().String())
 }
 
+// StoresUpdateCallbacksInChasm reports whether new Workflow Update callbacks are stored in CHASM for
+// this mutable state's namespace.
+func (ms *MutableStateImpl) StoresUpdateCallbacksInChasm() bool {
+	return ms.chasmCallbacksEnabled() &&
+		ms.config.EnableWorkflowUpdateCallbacks(ms.GetNamespaceEntry().Name().String())
+}
+
 // attachesCallbacksToChasm reports whether the completion callbacks for updateID, or the
 // workflow's own when updateID is empty, are attached to the CHASM tree. Update callbacks that
 // are not attached to CHASM are dropped. Attaching and ValidateCallbackAddition both route on
 // this, so that validation covers exactly the callbacks that get attached.
 func (ms *MutableStateImpl) attachesCallbacksToChasm(updateID string) bool {
-	if !ms.chasmCallbacksEnabled() {
-		return false
+	if updateID != "" {
+		return ms.StoresUpdateCallbacksInChasm()
 	}
-	return updateID == "" || ms.config.EnableWorkflowUpdateCallbacks(ms.GetNamespaceEntry().Name().String())
+	return ms.chasmCallbacksEnabled()
 }
 
 // ChasmSignalBacklinksEnabled returns true if CHASM-based signal requestID backlink tracking is enabled.
@@ -767,13 +774,9 @@ func (ms *MutableStateImpl) chasmWorkflowRootOnStartEnabled() bool {
 // This method is for write operations. Callers can type assert to *chasmworkflow.Workflow if needed.
 func (ms *MutableStateImpl) ChasmWorkflowComponent(ctx context.Context) (*chasmworkflow.Workflow, chasm.MutableContext, error) {
 	chasmCtx := chasm.NewMutableContext(ctx, ms.chasmTree.(*chasm.Node))
-	rootComponent, err := ms.chasmTree.ComponentByPath(chasmCtx, nil)
+	wf, err := ms.chasmWorkflowRoot(chasmCtx)
 	if err != nil {
 		return nil, nil, err
-	}
-	wf, ok := rootComponent.(*chasmworkflow.Workflow)
-	if !ok {
-		return nil, nil, serviceerror.NewInternalf("expected workflow component, but got %T", rootComponent)
 	}
 	return wf, chasmCtx, nil
 }
@@ -783,15 +786,23 @@ func (ms *MutableStateImpl) ChasmWorkflowComponent(ctx context.Context) (*chasmw
 // This method is for read-only operations.
 func (ms *MutableStateImpl) ChasmWorkflowComponentReadOnly(ctx context.Context) (*chasmworkflow.Workflow, chasm.Context, error) {
 	chasmCtx := chasm.NewContext(ctx, ms.chasmTree.(*chasm.Node))
-	rootComponent, err := ms.chasmTree.ComponentByPath(chasmCtx, nil)
+	wf, err := ms.chasmWorkflowRoot(chasmCtx)
 	if err != nil {
 		return nil, nil, err
 	}
+	return wf, chasmCtx, nil
+}
+
+func (ms *MutableStateImpl) chasmWorkflowRoot(ctx chasm.Context) (*chasmworkflow.Workflow, error) {
+	rootComponent, err := ms.chasmTree.ComponentByPath(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
 	wf, ok := rootComponent.(*chasmworkflow.Workflow)
 	if !ok {
-		return nil, nil, serviceerror.NewInternalf("expected workflow component, but got %T", rootComponent)
+		return nil, serviceerror.NewInternalf("expected workflow component, but got %T", rootComponent)
 	}
-	return wf, chasmCtx, nil
+	return wf, nil
 }
 
 func (ms *MutableStateImpl) EndpointRegistry() chasm.EndpointRegistry {
@@ -842,12 +853,19 @@ func (ms *MutableStateImpl) GetNexusUpdateCompletion(
 		WorkflowId: ms.executionInfo.WorkflowId,
 		RunId:      ms.executionState.RunId,
 	}
-	requestIDInfo, exists := ms.executionState.RequestIds[requestID]
-	if exists {
+	eventReference, exists, linkErr := ResolveCallbackAttachmentEventReference(ctx, ms, updateID, requestID)
+	if linkErr != nil {
+		ms.logger.Warn(
+			"unable to resolve update callback request ID link",
+			tag.NewStringTag("update-id", updateID),
+			tag.RequestID(requestID),
+			tag.Error(linkErr),
+		)
+	} else if exists {
 		link.Reference = &commonpb.Link_WorkflowEvent_RequestIdRef{
 			RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
 				RequestId: requestID,
-				EventType: requestIDInfo.GetEventType(),
+				EventType: eventReference.EventType,
 			},
 		}
 	}
@@ -1193,7 +1211,9 @@ func (ms *MutableStateImpl) FlushBufferedEvents() {
 	if ms.HasStartedWorkflowTask() {
 		return
 	}
-	ms.updatePendingEventIDs(ms.hBuilder.FlushBufferToCurrentBatch())
+	if err := ms.updatePendingEventIDs(ms.hBuilder.FlushBufferToCurrentBatch()); err != nil {
+		softassert.Fail(ms.logger, "failed to update pending event IDs", tag.Error(err))
+	}
 }
 
 func (ms *MutableStateImpl) UpdateCurrentVersion(
@@ -3528,17 +3548,44 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUnpausedEvent(event *historypb
 	return ms.updatePauseInfoSearchAttribute()
 }
 
-func (ms *MutableStateImpl) addUpdateCallbacks(
+// applyUpdateRequestIDAndCallbacks applies the request ID and completion callbacks carried by an
+// Update event. Existing legacy request ID information is passed to CHASM for mixed-version
+// deduplication before the current event is dual-written to legacy mutable state.
+func (ms *MutableStateImpl) applyUpdateRequestIDAndCallbacks(
 	event *historypb.HistoryEvent,
 	updateID string,
 	requestID string,
 	updateCallbacks []*commonpb.Callback,
 ) error {
-	if len(updateCallbacks) == 0 {
-		return nil
+	legacyRequestIDInfo := ms.executionState.RequestIds[requestID]
+	if legacyRequestIDInfo.GetAttachTime() != nil {
+		legacyRequestIDInfo = nil
 	}
-	if ms.attachesCallbacksToChasm(updateID) {
-		return ms.addUpdateCallbacksChasm(event, updateID, requestID, updateCallbacks)
+	var callbackAttachmentEventReference *chasmworkflow.CallbackAttachmentEventReference
+	updateCallbacksInChasm := len(updateCallbacks) > 0 && ms.attachesCallbacksToChasm(updateID)
+	if updateCallbacksInChasm {
+		var err error
+		callbackAttachmentEventReference, err = ms.addUpdateCallbacksChasm(
+			event,
+			updateID,
+			requestID,
+			updateCallbacks,
+			legacyRequestIDInfo,
+		)
+		if err != nil {
+			return err
+		}
+	}
+	if requestID != "" && legacyRequestIDInfo == nil {
+		if callbackAttachmentEventReference != nil {
+			ms.AttachRequestID(
+				requestID,
+				callbackAttachmentEventReference.EventType,
+				callbackAttachmentEventReference.EventID,
+			)
+		} else if !updateCallbacksInChasm {
+			ms.AttachRequestID(requestID, event.EventType, event.EventId)
+		}
 	}
 	return nil
 }
@@ -3548,13 +3595,47 @@ func (ms *MutableStateImpl) addUpdateCallbacksChasm(
 	updateID string,
 	requestID string,
 	updateCallbacks []*commonpb.Callback,
-) error {
+	legacyRequestIDInfo *persistencespb.RequestIDInfo,
+) (*chasmworkflow.CallbackAttachmentEventReference, error) {
 	wf, ctx, err := ms.ChasmWorkflowComponent(context.Background())
 	if err != nil {
-		return err
+		return nil, err
+	}
+	var legacyEventReference *chasmworkflow.CallbackAttachmentEventReference
+	// The legacy map is keyed by request ID across the entire Workflow. Only the current
+	// event can prove ownership here without loading history. Buffered IDs cannot identify
+	// an event, so leave those and other unverified legacy references to the read fallback.
+	if event.GetEventId() >= common.FirstEventID &&
+		legacyRequestIDInfo.GetEventId() == event.GetEventId() &&
+		legacyRequestIDInfo.GetEventType() == event.GetEventType() {
+		legacyEventReference = &chasmworkflow.CallbackAttachmentEventReference{
+			EventType: legacyRequestIDInfo.GetEventType(),
+			EventID:   legacyRequestIDInfo.GetEventId(),
+		}
 	}
 
-	return wf.AddUpdateCompletionCallbacks(ctx, event.EventTime, updateID, requestID, updateCallbacks)
+	err = wf.AddUpdateCompletionCallbacks(
+		ctx,
+		event.EventTime,
+		chasmworkflow.UpdateCallbackAttachment{
+			EventReference: chasmworkflow.CallbackAttachmentEventReference{
+				EventType: event.EventType,
+				EventID:   event.EventId,
+			},
+			UpdateID:             updateID,
+			RequestID:            requestID,
+			Callbacks:            updateCallbacks,
+			LegacyEventReference: legacyEventReference,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	reference, ok := wf.LookupCallbackAttachmentEventReference(ctx, updateID, requestID)
+	if !ok {
+		return nil, nil
+	}
+	return &reference, nil
 }
 
 func (ms *MutableStateImpl) addCompletionCallbacks(
@@ -5859,10 +5940,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAdmittedEvent(event *his
 	// may have a nil AcceptedRequest (because the UpdateAdmitted event already
 	// contains the request), causing callbacks to be lost at acceptance time.
 	requestID := attrs.GetRequest().GetRequestId()
-	if requestID != "" {
-		ms.AttachRequestID(requestID, event.EventType, event.EventId)
-	}
-	return ms.addUpdateCallbacks(
+	return ms.applyUpdateRequestIDAndCallbacks(
 		event,
 		updateID,
 		requestID,
@@ -5942,15 +6020,13 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAcceptedEvent(
 	// exist from the admitted event.
 	if attrs.GetAcceptedRequest() != nil {
 		requestID := attrs.GetAcceptedRequest().GetRequestId()
-		if requestID != "" {
-			ms.AttachRequestID(requestID, event.EventType, event.EventId)
-		}
-		if err := ms.addUpdateCallbacks(
+		err := ms.applyUpdateRequestIDAndCallbacks(
 			event,
 			updateID,
 			requestID,
 			attrs.GetAcceptedRequest().GetCompletionCallbacks(),
-		); err != nil {
+		)
+		if err != nil {
 			return err
 		}
 	}
@@ -6141,15 +6217,13 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 	for _, updateOptions := range attributes.GetWorkflowUpdateOptions() {
 		updateID := updateOptions.GetUpdateId()
 		requestID := updateOptions.GetAttachedRequestId()
-		if requestID != "" {
-			ms.AttachRequestID(requestID, event.EventType, event.EventId)
-		}
-		if err := ms.addUpdateCallbacks(
+		err := ms.applyUpdateRequestIDAndCallbacks(
 			event,
 			updateID,
 			requestID,
 			updateOptions.GetAttachedCompletionCallbacks(),
-		); err != nil {
+		)
+		if err != nil {
 			return err
 		}
 		// If the update is already completed, fire the callbacks immediately.
@@ -8846,7 +8920,14 @@ func (ms *MutableStateImpl) closeTransactionPrepareEvents(
 	newBufferBatch := historyMutation.DBBufferBatch
 	clearBuffer := historyMutation.DBClearBuffer
 	newEventsBatches := historyMutation.DBEventsBatches
-	ms.updatePendingEventIDs(historyMutation.ScheduledIDToStartedID, historyMutation.RequestIDToEventID)
+	err = ms.updatePendingEventIDs(
+		historyMutation.ScheduledIDToStartedID,
+		historyMutation.RequestIDToEventID,
+		historyMutation.UpdateCallbackEventIDs,
+	)
+	if err != nil {
+		return nil, nil, nil, false, err
+	}
 
 	workflowEventsSeq := make([]*persistence.WorkflowEvents, len(newEventsBatches))
 	historyNodeTxnIDs, err := ms.shard.GenerateTaskIDs(len(newEventsBatches))
@@ -8995,7 +9076,8 @@ func (ms *MutableStateImpl) dirtyHSMToReplicationTask(
 
 func (ms *MutableStateImpl) updatePendingEventIDs(
 	scheduledIDToStartedID map[int64]int64,
-	requestIDToEventID map[string]int64,
+	requestIDToEventID map[historybuilder.RequestEventKey]int64,
+	updateCallbackEventIDs map[historybuilder.UpdateCallbackRequestKey]int64,
 ) error {
 	for scheduledEventID, startedEventID := range scheduledIDToStartedID {
 		if activityInfo, ok := ms.GetActivityInfo(scheduledEventID); ok {
@@ -9011,26 +9093,47 @@ func (ms *MutableStateImpl) updatePendingEventIDs(
 		}
 	}
 	if len(requestIDToEventID) > 0 {
-		var wf *chasmworkflow.Workflow
-		var chasmCtx chasm.MutableContext
-		var err error
-		if ms.ChasmSignalBacklinksEnabled() {
-			wf, chasmCtx, err = ms.ChasmWorkflowComponent(context.Background())
-			if err != nil {
-				return err
+		for key, eventID := range requestIDToEventID {
+			requestIDInfo := ms.executionState.RequestIds[key.RequestID]
+			if requestIDInfo.GetEventId() == common.BufferedEventID && requestIDInfo.GetEventType() == key.EventType {
+				requestIDInfo.EventId = eventID
 			}
 		}
 
-		for requestID, eventID := range requestIDToEventID {
-			if requestIDInfo, ok := ms.executionState.RequestIds[requestID]; ok {
-				requestIDInfo.EventId = eventID
+		if ms.ChasmSignalBacklinksEnabled() {
+			wf, chasmCtx, err := ms.ChasmWorkflowComponent(context.Background())
+			if err != nil {
+				return err
 			}
-			if wf != nil {
-				// UpdateIncomingSignalEvent is a no-op for non-signal request IDs as they won't exist in the map.
-				if err := wf.UpdateIncomingSignalEvent(chasmCtx, requestID, eventID); err != nil {
+			for key, eventID := range requestIDToEventID {
+				if key.EventType != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
+					continue
+				}
+				if err := wf.UpdateIncomingSignalEvent(chasmCtx, key.RequestID, eventID); err != nil {
 					return err
 				}
 			}
+		}
+	}
+	if len(updateCallbackEventIDs) != 0 && ms.ChasmEnabled() {
+		tree, ok := ms.chasmTree.(*chasm.Node)
+		if !ok {
+			return serviceerror.NewInternalf("expected CHASM node, but got %T", ms.chasmTree)
+		}
+
+		// Resolve the root read-only so only Updates whose event IDs change are marked dirty.
+		ctx := context.Background()
+		wf, err := ms.chasmWorkflowRoot(chasm.NewContext(ctx, tree))
+		if common.IsNotFoundError(err) {
+			// An event can carry callbacks even if attachment was disabled when it was applied.
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		chasmCtx := chasm.NewMutableContext(ctx, tree)
+		for key, eventID := range updateCallbackEventIDs {
+			wf.SetCallbackAttachmentEventReferenceEventID(chasmCtx, key.UpdateID, key.RequestID, eventID)
 		}
 	}
 	return nil

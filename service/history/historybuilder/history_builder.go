@@ -49,7 +49,19 @@ type (
 		// scheduled to started event ID mapping for flushed buffered event
 		ScheduledIDToStartedID map[int64]int64
 		// request id to event ID mapping for flushed buffered event
-		RequestIDToEventID map[string]int64
+		RequestIDToEventID map[RequestEventKey]int64
+		// Update callback attachments are scoped to an Update, independently of legacy request IDs.
+		UpdateCallbackEventIDs map[UpdateCallbackRequestKey]int64
+	}
+
+	RequestEventKey struct {
+		RequestID string
+		EventType enumspb.EventType
+	}
+
+	UpdateCallbackRequestKey struct {
+		UpdateID  string
+		RequestID string
 	}
 
 	TaskIDGenerator func(number int) ([]int64, error)
@@ -83,7 +95,7 @@ func New(
 			memLatestBatch:         nil,
 			memBufferBatch:         nil,
 			scheduledIDToStartedID: make(map[int64]int64),
-			requestIDToEventID:     make(map[string]int64),
+			requestIDToEventID:     make(map[RequestEventKey]int64),
 
 			maxEventBatchSizeInBytes: maxEventBatchSizeInBytes,
 

@@ -130,7 +130,7 @@ func TestCallbackAttachmentReferenceReadsDoNotDirtyUpdateNode(t *testing.T) {
 			require.Equal(t, 1, visits)
 		}},
 		{"DuplicateAttach", func(t *testing.T, wf *Workflow, ctx chasm.MutableContext) {
-			require.NoError(t, wf.AddUpdateCompletionCallbacksWithAttachmentEventReference(ctx, timestamppb.Now(), UpdateCallbackAttachment{
+			require.NoError(t, wf.AddUpdateCompletionCallbacks(ctx, timestamppb.Now(), UpdateCallbackAttachment{
 				UpdateID: "update-id", RequestID: "request-id", Callbacks: nexusCallbacks("http://callback"),
 			}))
 		}},
@@ -138,7 +138,7 @@ func TestCallbackAttachmentReferenceReadsDoNotDirtyUpdateNode(t *testing.T) {
 			require.False(t, wf.tryBackfillCallbackAttachmentEventReference(ctx, "update-id", "missing-request-id", reference))
 		}},
 		{"AttachMissWithoutCallbacks", func(t *testing.T, wf *Workflow, ctx chasm.MutableContext) {
-			require.NoError(t, wf.AddUpdateCompletionCallbacksWithAttachmentEventReference(ctx, timestamppb.Now(), UpdateCallbackAttachment{
+			require.NoError(t, wf.AddUpdateCompletionCallbacks(ctx, timestamppb.Now(), UpdateCallbackAttachment{
 				UpdateID: "update-id", RequestID: "missing-request-id",
 			}))
 		}},

@@ -127,13 +127,13 @@ func TestHistoryBuilder_AddWorkflowExecutionStartedEvent(t *testing.T) {
 func TestHistoryBuilder_FlushBufferToCurrentBatch(t *testing.T) {
 	t.Run("when no events in dbBufferBatch or meBufferBatch will return scheduledIDToStartedID", func(t *testing.T) {
 		hb := HistoryBuilder{
-			EventStore{scheduledIDToStartedID: make(map[int64]int64), requestIDToEventID: make(map[string]int64), maxEventBatchSizeInBytes: tests.NewDynamicConfig().MaximumEventBatchSizeInBytes},
+			EventStore{scheduledIDToStartedID: make(map[int64]int64), requestIDToEventID: make(map[RequestEventKey]int64), maxEventBatchSizeInBytes: tests.NewDynamicConfig().MaximumEventBatchSizeInBytes},
 			EventFactory{},
 		}
 		hb.scheduledIDToStartedID[71] = 42
-		hb.requestIDToEventID["request-id-1"] = 7
+		hb.requestIDToEventID[RequestEventKey{RequestID: "request-id-1", EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED}] = 7
 
-		scheduled, requestIDToEventID := hb.FlushBufferToCurrentBatch()
+		scheduled, requestIDToEventID, _ := hb.FlushBufferToCurrentBatch()
 		if len(scheduled) != len(hb.scheduledIDToStartedID) {
 			t.Errorf("wrong scheduled2started map")
 		}
@@ -144,8 +144,8 @@ func TestHistoryBuilder_FlushBufferToCurrentBatch(t *testing.T) {
 		if len(requestIDToEventID) != len(hb.requestIDToEventID) {
 			t.Errorf("wrong requestIDToEventID map")
 		}
-		if requestIDToEventID["request-id-1"] != 7 {
-			t.Errorf("wrong value in map, expected 7 got %d", requestIDToEventID["request-id-1"])
+		if requestIDToEventID[RequestEventKey{RequestID: "request-id-1", EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED}] != 7 {
+			t.Errorf("wrong value in map, expected 7 got %d", requestIDToEventID[RequestEventKey{RequestID: "request-id-1", EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED}])
 		}
 	})
 
@@ -169,7 +169,7 @@ func TestHistoryBuilder_FlushBufferToCurrentBatch(t *testing.T) {
 	})
 
 	t.Run("when there are events in both memBufferBatch and dbBufferBatch will move all to latest", func(t *testing.T) {
-		assertEventsWired := func(scheduled map[int64]int64, requestIDToEventID map[string]int64) {
+		assertEventsWired := func(scheduled map[int64]int64, requestIDToEventID map[RequestEventKey]int64) {
 			t.Helper()
 			if len(scheduled) != 1 {
 				t.Fatalf("expected one scheduledToStartedIds event got %d", len(scheduled))
@@ -185,7 +185,7 @@ func TestHistoryBuilder_FlushBufferToCurrentBatch(t *testing.T) {
 			if len(requestIDToEventID) != 1 {
 				t.Fatalf("expected one requestIDToEventID event got %d", len(requestIDToEventID))
 			}
-			eventID, ok := requestIDToEventID["request-id-1"]
+			eventID, ok := requestIDToEventID[RequestEventKey{RequestID: "request-id-1", EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED}]
 			if !ok {
 				t.Fatal("requestIDToEventID event not found")
 			}
@@ -215,7 +215,7 @@ func TestHistoryBuilder_FlushBufferToCurrentBatch(t *testing.T) {
 			t.Errorf("expected 2 event in memBufferBatch got %d", len(hb.memBufferBatch))
 		}
 
-		scheduledToStartedIds, requestIDToEventID := hb.FlushBufferToCurrentBatch()
+		scheduledToStartedIds, requestIDToEventID, _ := hb.FlushBufferToCurrentBatch()
 		assertEventsWired(scheduledToStartedIds, requestIDToEventID)
 		if len(hb.memLatestBatch) != 3 {
 			t.Errorf("wrong size of memLatestBatch expected 3 got %d", len(hb.memLatestBatch))
@@ -234,12 +234,12 @@ func TestHistoryBuilder_FlushBufferToCurrentBatch(t *testing.T) {
 			t.Fatalf("expected signal to be buffered, got event id %d", signalEvent.EventId)
 		}
 
-		_, requestIDToEventID := hb.FlushBufferToCurrentBatch()
+		_, requestIDToEventID, _ := hb.FlushBufferToCurrentBatch()
 
 		if signalEvent.EventId != nextEventID {
 			t.Errorf("expected signal event id %d after flush, got %d", nextEventID, signalEvent.EventId)
 		}
-		eventID, ok := requestIDToEventID["signal-request-id"]
+		eventID, ok := requestIDToEventID[RequestEventKey{RequestID: "signal-request-id", EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED}]
 		if !ok {
 			t.Fatal("signal requestID not found in requestIDToEventID map after flush")
 		}
@@ -261,9 +261,9 @@ func TestHistoryBuilder_FlushBufferToCurrentBatch(t *testing.T) {
 		)
 		require.Equal(t, common.BufferedEventID, optionsEvent.EventId, "options updated event should be buffered")
 
-		_, requestIDToEventID := hb.FlushBufferToCurrentBatch()
+		_, requestIDToEventID, _ := hb.FlushBufferToCurrentBatch()
 		require.Equal(t, nextEventID, optionsEvent.EventId, "options event must be updated after flushing buffer")
-		require.Equal(t, nextEventID, requestIDToEventID["update-request-id"], "requestID must be present in requestIDToEventID after flush")
+		require.Equal(t, nextEventID, requestIDToEventID[RequestEventKey{RequestID: "update-request-id", EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED}], "requestID must be present in requestIDToEventID after flush")
 	})
 
 	t.Run("when there is ACTIVITY_TASK_COMPLETED event will move it to the end", func(t *testing.T) {
@@ -294,7 +294,7 @@ func TestHistoryBuilder_FlushBufferToCurrentBatch(t *testing.T) {
 		hb := newSUT()
 		hb.AddActivityTaskStartedEvent(eventConfig{scheduledId: 42})
 		hb.AddActivityTaskCanceledEvent()
-		scheduledToStarted, _ := hb.FlushBufferToCurrentBatch()
+		scheduledToStarted, _, _ := hb.FlushBufferToCurrentBatch()
 		scheduled, ok := scheduledToStarted[42]
 		if !ok {
 			t.Fatalf("event not in map %v", scheduled)
@@ -1034,7 +1034,7 @@ func TestHistoryBuilder_FlushBufferToCurrentBatch_WiringEvents(t *testing.T) {
 		timedOut := sut.AddActivityTaskTimedOutEvent(eventConfig{scheduledId: 2, startedId: 26})
 		canceled := sut.AddActivityTaskCanceledEvent(eventConfig{scheduledId: 2})
 
-		scheduledToStarted, _ := sut.FlushBufferToCurrentBatch()
+		scheduledToStarted, _, _ := sut.FlushBufferToCurrentBatch()
 
 		if scheduledToStarted[2] != started.EventId {
 			t.Errorf(
@@ -1085,7 +1085,7 @@ func TestHistoryBuilder_FlushBufferToCurrentBatch_WiringEvents(t *testing.T) {
 		canceled := sut.AddChildWorkflowExecutionCanceledEvent(eventConfig{initiatedId: 42, startedId: 98})
 		terminated := sut.AddChildWorkflowExecutionTerminatedEvent(eventConfig{initiatedId: 42, startedId: 100})
 
-		scheduledToStarted, _ := sut.FlushBufferToCurrentBatch()
+		scheduledToStarted, _, _ := sut.FlushBufferToCurrentBatch()
 
 		if scheduledToStarted[42] != started.EventId {
 			t.Errorf(

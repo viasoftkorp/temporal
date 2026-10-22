@@ -32,7 +32,7 @@ func addTestUpdateCompletionCallbacks(
 	requestID string,
 	completionCallbacks []*commonpb.Callback,
 ) error {
-	return wf.AddUpdateCompletionCallbacksWithAttachmentEventReference(
+	return wf.AddUpdateCompletionCallbacks(
 		ctx,
 		timestamppb.Now(),
 		UpdateCallbackAttachment{
@@ -47,7 +47,7 @@ func addTestUpdateCompletionCallbacks(
 	)
 }
 
-func TestAddUpdateCompletionCallbacksWithAttachmentEventReference(t *testing.T) {
+func TestAddUpdateCompletionCallbacks(t *testing.T) {
 	t.Parallel()
 
 	t.Run("AttachesAndStoresReference", func(t *testing.T) {
@@ -58,7 +58,7 @@ func TestAddUpdateCompletionCallbacksWithAttachmentEventReference(t *testing.T) 
 			EventID:   11,
 		}
 
-		require.NoError(t, wf.AddUpdateCompletionCallbacksWithAttachmentEventReference(
+		require.NoError(t, wf.AddUpdateCompletionCallbacks(
 			ctx,
 			timestamppb.Now(),
 			UpdateCallbackAttachment{
@@ -84,7 +84,7 @@ func TestAddUpdateCompletionCallbacksWithAttachmentEventReference(t *testing.T) 
 			EventID:   11,
 		}
 
-		require.NoError(t, wf.AddUpdateCompletionCallbacksWithAttachmentEventReference(
+		require.NoError(t, wf.AddUpdateCompletionCallbacks(
 			ctx,
 			timestamppb.Now(),
 			UpdateCallbackAttachment{
@@ -94,7 +94,7 @@ func TestAddUpdateCompletionCallbacksWithAttachmentEventReference(t *testing.T) 
 				EventReference: originalReference,
 			},
 		))
-		require.NoError(t, wf.AddUpdateCompletionCallbacksWithAttachmentEventReference(
+		require.NoError(t, wf.AddUpdateCompletionCallbacks(
 			ctx,
 			timestamppb.Now(),
 			UpdateCallbackAttachment{
@@ -122,7 +122,7 @@ func TestAddUpdateCompletionCallbacksWithAttachmentEventReference(t *testing.T) 
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
 			EventID:   11,
 		}
-		require.NoError(t, wf.AddUpdateCompletionCallbacksWithAttachmentEventReference(
+		require.NoError(t, wf.AddUpdateCompletionCallbacks(
 			ctx,
 			timestamppb.Now(),
 			UpdateCallbackAttachment{
@@ -134,7 +134,7 @@ func TestAddUpdateCompletionCallbacksWithAttachmentEventReference(t *testing.T) 
 		))
 		wf.Updates["update-id"].Get(ctx).CallbackAttachmentEventReferences = nil
 
-		require.NoError(t, wf.AddUpdateCompletionCallbacksWithAttachmentEventReference(
+		require.NoError(t, wf.AddUpdateCompletionCallbacks(
 			ctx,
 			timestamppb.Now(),
 			UpdateCallbackAttachment{
@@ -167,7 +167,7 @@ func TestAddUpdateCompletionCallbacksWithAttachmentEventReference(t *testing.T) 
 			EventID:   11,
 		}
 
-		require.NoError(t, wf.AddUpdateCompletionCallbacksWithAttachmentEventReference(
+		require.NoError(t, wf.AddUpdateCompletionCallbacks(
 			ctx,
 			timestamppb.Now(),
 			UpdateCallbackAttachment{
@@ -193,11 +193,11 @@ func TestAddUpdateCompletionCallbacksWithAttachmentEventReference(t *testing.T) 
 			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
 			EventID:   11,
 		}
-		require.NoError(t, wf.AddUpdateCompletionCallbacks(
+		require.NoError(t, wf.addUpdateCompletionCallbacks(
 			ctx, timestamppb.Now(), "update-id", "request-id", completionCallbacks,
 		))
 
-		require.NoError(t, wf.AddUpdateCompletionCallbacksWithAttachmentEventReference(
+		require.NoError(t, wf.AddUpdateCompletionCallbacks(
 			ctx,
 			timestamppb.Now(),
 			UpdateCallbackAttachment{
@@ -219,11 +219,11 @@ func TestAddUpdateCompletionCallbacksWithAttachmentEventReference(t *testing.T) 
 		ctx := newTestCHASMContext(t)
 		wf := newTestWorkflow()
 		completionCallbacks := nexusCallbacks("http://callback")
-		require.NoError(t, wf.AddUpdateCompletionCallbacks(
+		require.NoError(t, wf.addUpdateCompletionCallbacks(
 			ctx, timestamppb.Now(), "update-id", "request-id", completionCallbacks,
 		))
 
-		require.NoError(t, wf.AddUpdateCompletionCallbacksWithAttachmentEventReference(
+		require.NoError(t, wf.AddUpdateCompletionCallbacks(
 			ctx,
 			timestamppb.Now(),
 			UpdateCallbackAttachment{
@@ -250,7 +250,7 @@ func TestTryBackfillCallbackAttachmentEventReference(t *testing.T) {
 		t.Helper()
 		ctx := newTestCHASMContext(t)
 		wf := newTestWorkflow()
-		require.NoError(t, wf.AddUpdateCompletionCallbacksWithAttachmentEventReference(
+		require.NoError(t, wf.AddUpdateCompletionCallbacks(
 			ctx,
 			timestamppb.Now(),
 			UpdateCallbackAttachment{
@@ -328,7 +328,7 @@ func TestCallbackExistenceChecksLeaveUninitializedMapNil(t *testing.T) {
 
 	require.False(t, wf.tryBackfillCallbackAttachmentEventReference(ctx, "update-id", "request-id", CallbackAttachmentEventReference{}))
 	require.Nil(t, update.Callbacks)
-	require.NoError(t, wf.AddUpdateCompletionCallbacksWithAttachmentEventReference(ctx, timestamppb.Now(), UpdateCallbackAttachment{
+	require.NoError(t, wf.AddUpdateCompletionCallbacks(ctx, timestamppb.Now(), UpdateCallbackAttachment{
 		UpdateID: "update-id", RequestID: "request-id",
 	}))
 	require.Nil(t, update.Callbacks)
@@ -350,7 +350,7 @@ func TestVisitCallbackAttachmentEventReferences(t *testing.T) {
 				EventID:   12,
 			},
 		}
-		require.NoError(t, wf.AddUpdateCompletionCallbacksWithAttachmentEventReference(
+		require.NoError(t, wf.AddUpdateCompletionCallbacks(
 			ctx,
 			timestamppb.Now(),
 			UpdateCallbackAttachment{
@@ -360,7 +360,7 @@ func TestVisitCallbackAttachmentEventReferences(t *testing.T) {
 				EventReference: expected["update-1/request-1"],
 			},
 		))
-		require.NoError(t, wf.AddUpdateCompletionCallbacksWithAttachmentEventReference(
+		require.NoError(t, wf.AddUpdateCompletionCallbacks(
 			ctx,
 			timestamppb.Now(),
 			UpdateCallbackAttachment{
@@ -409,7 +409,7 @@ func TestSetCallbackAttachmentEventReferenceEventID(t *testing.T) {
 			EventID:   common.BufferedEventID,
 		}
 		for _, updateID := range []string{"update-1", "update-2"} {
-			require.NoError(t, wf.AddUpdateCompletionCallbacksWithAttachmentEventReference(
+			require.NoError(t, wf.AddUpdateCompletionCallbacks(
 				ctx,
 				timestamppb.Now(),
 				UpdateCallbackAttachment{
@@ -434,7 +434,7 @@ func TestSetCallbackAttachmentEventReferenceEventID(t *testing.T) {
 	t.Run("LeavesDurableReferenceUnchanged", func(t *testing.T) {
 		ctx := newTestCHASMContext(t)
 		wf := newTestWorkflow()
-		require.NoError(t, wf.AddUpdateCompletionCallbacksWithAttachmentEventReference(
+		require.NoError(t, wf.AddUpdateCompletionCallbacks(
 			ctx,
 			timestamppb.Now(),
 			UpdateCallbackAttachment{
