@@ -1279,7 +1279,9 @@ func TestAttachLinks_RejectsWhenComponentCapExceeded(t *testing.T) {
 		},
 	}
 	// per-component cap = 1; activity already has 1 link, so any additional must fail.
-	validator := newTestLinkValidator(t, defaultMaxLinksPerRequest, func(string) int { return 1 }, defaultLinkMaxSize)
+	cfg := test.NewLinksValidatorConfig()
+	cfg.MaxLinksPerExecution = func(string) int { return 1 }
+	validator := test.NewLinksValidator(t, cfg)
 	activity := &Activity{
 		ActivityState: &activitypb.ActivityState{Status: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED},
 	}
