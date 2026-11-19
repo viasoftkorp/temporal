@@ -113,10 +113,13 @@ func nextBackoffInterval(
 
 // Helpers for creating new retry/cron workflows:
 
+// SetupNewWorkflowForRetryOrCron builds the next run of a retried or cron workflow. previousSessionBinding is the
+// previous run's SessionBinding, taken before that run closed.
 func SetupNewWorkflowForRetryOrCron(
 	ctx context.Context,
 	previousMutableState historyi.MutableState,
 	newMutableState historyi.MutableState,
+	previousSessionBinding historyi.SessionBinding,
 	newRunID string,
 	startAttr *historypb.WorkflowExecutionStartedEventAttributes,
 	startLinks []*commonpb.Link,
@@ -318,6 +321,7 @@ func SetupNewWorkflowForRetryOrCron(
 	if err != nil {
 		return serviceerror.NewInternal("Failed to add workflow execution started event.")
 	}
+	newMutableState.InheritSessionBinding(previousSessionBinding)
 	var parentClock *clockspb.VectorClock
 	if parentInfo != nil {
 		parentClock = parentInfo.Clock

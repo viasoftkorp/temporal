@@ -955,6 +955,9 @@ func (handler *workflowTaskCompletedHandler) handleCommandCompleteWorkflow(
 		newExecutionRunID = uuid.NewString()
 	}
 
+	// Taken before the close, which clears a non-exclusive binding.
+	sessionBinding := handler.mutableState.SessionBinding()
+
 	// Always add workflow completed event to this one
 	event, err := handler.mutableState.AddCompletedWorkflowEvent(handler.workflowTaskCompletedID, attr, newExecutionRunID)
 	if err != nil {
@@ -963,7 +966,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandCompleteWorkflow(
 
 	// Check if this workflow has a cron schedule
 	if cronBackoff != backoff.NoBackoff {
-		return event, handler.handleCron(ctx, cronBackoff, attr.GetResult(), nil, newExecutionRunID)
+		return event, handler.handleCron(ctx, cronBackoff, attr.GetResult(), nil, newExecutionRunID, sessionBinding)
 	}
 
 	return event, nil
@@ -1017,6 +1020,9 @@ func (handler *workflowTaskCompletedHandler) handleCommandFailWorkflow(
 		newExecutionRunID = uuid.NewString()
 	}
 
+	// Taken before the close, which clears a non-exclusive binding.
+	sessionBinding := handler.mutableState.SessionBinding()
+
 	// Always add workflow failed event
 	event, err := handler.mutableState.AddFailWorkflowEvent(
 		handler.workflowTaskCompletedID,
@@ -1030,9 +1036,9 @@ func (handler *workflowTaskCompletedHandler) handleCommandFailWorkflow(
 
 	// Handle retry or cron
 	if retryBackoff != backoff.NoBackoff {
-		return event, handler.handleRetry(ctx, retryBackoff, attr.GetFailure(), newExecutionRunID)
+		return event, handler.handleRetry(ctx, retryBackoff, attr.GetFailure(), newExecutionRunID, sessionBinding)
 	} else if cronBackoff != backoff.NoBackoff {
-		return event, handler.handleCron(ctx, cronBackoff, nil, attr.GetFailure(), newExecutionRunID)
+		return event, handler.handleCron(ctx, cronBackoff, nil, attr.GetFailure(), newExecutionRunID, sessionBinding)
 	}
 
 	// No retry or cron
@@ -1562,6 +1568,7 @@ func (handler *workflowTaskCompletedHandler) handleRetry(
 	backoffInterval time.Duration,
 	failure *failurepb.Failure,
 	newRunID string,
+	sessionBinding historyi.SessionBinding,
 ) error {
 	startEvent, err := handler.mutableState.GetStartEvent(ctx)
 	if err != nil {
@@ -1587,6 +1594,7 @@ func (handler *workflowTaskCompletedHandler) handleRetry(
 		ctx,
 		handler.mutableState,
 		newMutableState,
+		sessionBinding,
 		newRunID,
 		startAttr,
 		startEvent.Links,
@@ -1618,6 +1626,7 @@ func (handler *workflowTaskCompletedHandler) handleCron(
 	lastCompletionResult *commonpb.Payloads,
 	failure *failurepb.Failure,
 	newRunID string,
+	sessionBinding historyi.SessionBinding,
 ) error {
 	startEvent, err := handler.mutableState.GetStartEvent(ctx)
 	if err != nil {
@@ -1647,6 +1656,7 @@ func (handler *workflowTaskCompletedHandler) handleCron(
 		ctx,
 		handler.mutableState,
 		newMutableState,
+		sessionBinding,
 		newRunID,
 		startAttr,
 		startEvent.Links,

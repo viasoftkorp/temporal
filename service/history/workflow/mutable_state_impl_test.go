@@ -11123,6 +11123,57 @@ func (s *mutableStateSuite) TestUpdateNonExclusiveWorkerBinding() {
 }
 
 /*
+TestInheritSessionBinding tests that a new run of the same workflow (continue-as-new, retry, cron) keeps its worker:
+ 1. The previous run is bound to a worker (exclusive or not), or unbound.
+ 2. The new run inherits the binding, its sticky mirror and, for a non-exclusive binding, the sticky timeout.
+ 3. A new run on another task queue, or after an unbound run, starts unbound.
+*/
+func (s *mutableStateSuite) TestInheritSessionBinding() {
+	bound := func(queue string, exclusive bool) *persistencespb.SessionState {
+		return &persistencespb.SessionState{ExclusiveWorker: exclusive, BoundWorkerInfo: &taskqueuespb.BoundWorkerInfo{WorkerQueue: queue, InstanceKey: "k"}}
+	}
+	for _, tc := range []struct {
+		name              string
+		sessionState      *persistencespb.SessionState
+		stickyTimeout     *durationpb.Duration
+		otherTaskQueue    bool
+		wantSessionState  *persistencespb.SessionState
+		wantStickyTimeout time.Duration
+	}{
+		{name: "exclusive binding", sessionState: bound("S", true), wantSessionState: bound("S", true)},
+		{name: "non-exclusive binding keeps its timeout", sessionState: bound("X", false), stickyTimeout: durationpb.New(7 * time.Second),
+			wantSessionState: bound("X", false), wantStickyTimeout: 7 * time.Second},
+		{name: "non-exclusive binding without a timeout gets the default", sessionState: bound("X", false),
+			wantSessionState: bound("X", false), wantStickyTimeout: defaultSessionStickyScheduleToStartTimeout},
+		{name: "unbound previous run"},
+		{name: "new run on another task queue", sessionState: bound("X", false), otherTaskQueue: true},
+		{name: "exclusive binding on another task queue", sessionState: bound("S", true), otherTaskQueue: true},
+	} {
+		s.Run(tc.name, func() {
+			s.SetupTest()
+			previous := historyi.SessionBinding{
+				TaskQueue:     s.mutableState.executionInfo.GetTaskQueue(),
+				State:         tc.sessionState,
+				StickyTimeout: tc.stickyTimeout,
+			}
+			if tc.otherTaskQueue {
+				previous.TaskQueue = "another-task-queue"
+			}
+
+			s.mutableState.InheritSessionBinding(previous)
+
+			protorequire.ProtoEqual(s.T(), tc.wantSessionState, s.mutableState.executionInfo.GetSessionState())
+			s.Equal(tc.wantSessionState.GetBoundWorkerInfo().GetWorkerQueue(), s.mutableState.executionInfo.GetStickyTaskQueue())
+			if tc.wantStickyTimeout != 0 {
+				s.Equal(tc.wantStickyTimeout, s.mutableState.executionInfo.GetStickyScheduleToStartTimeout().AsDuration())
+			} else {
+				s.Nil(s.mutableState.executionInfo.GetStickyScheduleToStartTimeout())
+			}
+		})
+	}
+}
+
+/*
 TestStickyScheduleToStartTimeoutForBoundWorkflow tests the sticky timeout used for a workflow task's timer:
  1. A workflow bound to a worker whose reported sticky timeout is missing or 0 gets the default, since its
     timed-out task is re-offered to the same worker and a 0 timer would loop.

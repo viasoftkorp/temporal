@@ -3180,6 +3180,18 @@ func (mr *MockMutableStateMockRecorder) HasStartedWorkflowTask() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasStartedWorkflowTask", reflect.TypeOf((*MockMutableState)(nil).HasStartedWorkflowTask))
 }
 
+// InheritSessionBinding mocks base method.
+func (m *MockMutableState) InheritSessionBinding(previous SessionBinding) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "InheritSessionBinding", previous)
+}
+
+// InheritSessionBinding indicates an expected call of InheritSessionBinding.
+func (mr *MockMutableStateMockRecorder) InheritSessionBinding(previous any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InheritSessionBinding", reflect.TypeOf((*MockMutableState)(nil).InheritSessionBinding), previous)
+}
+
 // InitTransitionHistory mocks base method.
 func (m *MockMutableState) InitTransitionHistory() {
 	m.ctrl.T.Helper()
@@ -3579,6 +3591,20 @@ func (m *MockMutableState) RetryActivity(ai *persistence.ActivityInfo, arg1 *fai
 func (mr *MockMutableStateMockRecorder) RetryActivity(ai, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetryActivity", reflect.TypeOf((*MockMutableState)(nil).RetryActivity), ai, arg1)
+}
+
+// SessionBinding mocks base method.
+func (m *MockMutableState) SessionBinding() SessionBinding {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SessionBinding")
+	ret0, _ := ret[0].(SessionBinding)
+	return ret0
+}
+
+// SessionBinding indicates an expected call of SessionBinding.
+func (mr *MockMutableStateMockRecorder) SessionBinding() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SessionBinding", reflect.TypeOf((*MockMutableState)(nil).SessionBinding))
 }
 
 // SessionWorkerQueue mocks base method.

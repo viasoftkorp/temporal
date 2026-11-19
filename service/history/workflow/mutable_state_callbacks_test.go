@@ -235,6 +235,7 @@ func (s *mutableStateSuite) TestChasmCompletionCallbacks_RetryKeepsCallbacksOver
 		context.Background(),
 		ms,
 		newRun,
+		historyi.SessionBinding{},
 		newRunID,
 		startEvent.GetWorkflowExecutionStartedEventAttributes(),
 		nil,

@@ -716,6 +716,9 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 		newRunID = uuid.NewString()
 	}
 
+	// Taken before the close, which clears a non-exclusive binding.
+	sessionBinding := mutableState.SessionBinding()
+
 	// First add timeout workflow event, no matter what we're doing next.
 	if err := workflow.TimeoutWorkflow(
 		mutableState,
@@ -761,6 +764,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 		ctx,
 		mutableState,
 		newMutableState,
+		sessionBinding,
 		newRunID,
 		startAttr,
 		startEvent.Links,

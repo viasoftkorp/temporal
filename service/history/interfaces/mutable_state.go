@@ -43,6 +43,14 @@ import (
 type (
 	ActivityUpdater func(*persistencespb.ActivityInfo, MutableState) error
 
+	// SessionBinding is a run's worker binding, as the next run of the same workflow inherits it. The zero value is an
+	// unbound run.
+	SessionBinding struct {
+		TaskQueue     string
+		State         *persistencespb.SessionState
+		StickyTimeout *durationpb.Duration
+	}
+
 	MutableState interface {
 		AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
 		GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error)
@@ -240,6 +248,10 @@ type (
 
 		CurrentTaskQueue() *taskqueuepb.TaskQueue
 		BindExclusiveWorker(stableIdentity string, instanceKey string)
+		// SessionBinding returns a copy of the run's session binding. Retry and cron take it before closing the run, because
+		// closing clears a non-exclusive binding in place.
+		SessionBinding() SessionBinding
+		InheritSessionBinding(previous SessionBinding)
 		SetStickyTaskQueue(name string, scheduleToStartTimeout *durationpb.Duration)
 		ClearStickyTaskQueue()
 		IsStickyTaskQueueSet() bool

@@ -1510,7 +1510,8 @@ func (ms *MutableStateImpl) BindExclusiveWorker(stableIdentity string, instanceK
 }
 
 // setSessionState writes the session state and mirrors its location in the sticky queue. Callers outside mutable
-// state go through BindExclusiveWorker or UpdateNonExclusiveWorkerBinding, so the mirror and the exclusive binding hold.
+// state go through BindExclusiveWorker, UpdateNonExclusiveWorkerBinding or InheritSessionBinding, so the mirror and
+// the exclusive binding hold.
 func (ms *MutableStateImpl) setSessionState(state *persistencespb.SessionState) {
 	current := ms.executionInfo.GetSessionState()
 	if current.GetExclusiveWorker() &&
@@ -1609,6 +1610,35 @@ func (ms *MutableStateImpl) UpdateNonExclusiveWorkerBinding(
 		return false, err
 	}
 	return true, ms.reschedulePendingActivities(activityRescheduleForSessionMove, 0)
+}
+
+// SessionBinding returns a copy of the run's session binding.
+func (ms *MutableStateImpl) SessionBinding() historyi.SessionBinding {
+	if ms.SessionWorkerQueue() == "" {
+		return historyi.SessionBinding{}
+	}
+	return historyi.SessionBinding{
+		TaskQueue:     ms.executionInfo.GetTaskQueue(),
+		State:         common.CloneProto(ms.executionInfo.GetSessionState()),
+		StickyTimeout: ms.executionInfo.GetStickyScheduleToStartTimeout(),
+	}
+}
+
+// InheritSessionBinding binds a new run of the same workflow (continue-as-new, retry or cron) to the previous run's
+// worker, so the session stays on that worker. It must run after the new run's started event (which sets its task
+// queue) and before its first workflow task is scheduled. A new run on a different task queue starts unbound, because
+// the bound worker only serves the previous run's queue.
+func (ms *MutableStateImpl) InheritSessionBinding(previous historyi.SessionBinding) {
+	workerQueue := previous.State.GetBoundWorkerInfo().GetWorkerQueue()
+	if workerQueue == "" || previous.TaskQueue != ms.executionInfo.GetTaskQueue() {
+		return
+	}
+	instanceKey := previous.State.GetBoundWorkerInfo().GetInstanceKey()
+	if previous.State.GetExclusiveWorker() {
+		ms.BindExclusiveWorker(workerQueue, instanceKey)
+		return
+	}
+	ms.bindNonExclusiveWorker(workerQueue, instanceKey, common.CloneProto(previous.StickyTimeout))
 }
 
 // unbindNonExclusiveWorker clears the workflow's non-exclusive binding and the sticky queue mirroring it.
@@ -3115,6 +3145,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	if err != nil {
 		return nil, err
 	}
+	ms.InheritSessionBinding(previousExecutionState.SessionBinding())
 	var parentClock *clockspb.VectorClock
 	if parentExecutionInfo != nil {
 		parentClock = parentExecutionInfo.Clock
