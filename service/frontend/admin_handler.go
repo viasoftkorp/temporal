@@ -119,6 +119,7 @@ type (
 		chasmRegistry              *chasm.Registry
 		schedulerClient            schedulerpb.SchedulerServiceClient
 		metricsHandler             metrics.Handler
+		namespaceHandler           *namespaceHandler
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -170,6 +171,7 @@ func NewAdminHandler(
 	args NewAdminHandlerArgs,
 	namespaceDLQHandler nsreplication.DLQMessageHandler,
 	namespaceMutationExecutor nsreplication.MutationTaskExecutor,
+	namespaceHandler *namespaceHandler,
 ) *AdminHandler {
 	historyHealthChecker := NewHealthChecker(
 		primitives.HistoryService,
@@ -186,6 +188,7 @@ func NewAdminHandler(
 		eventLogger:                args.EventLogger,
 		status:                     common.DaemonStatusInitialized,
 		numberOfHistoryShards:      args.PersistenceConfig.NumHistoryShards,
+		namespaceHandler:           namespaceHandler,
 		config:                     args.Config,
 		namespaceDLQHandler:        namespaceDLQHandler,
 		namespaceMutationExecutor:  namespaceMutationExecutor,
@@ -1438,6 +1441,26 @@ func (adh *AdminHandler) MergeDLQMessages(
 	default:
 		return nil, errDLQTypeIsNotSupported
 	}
+}
+
+// CloseNamespaceRestore moves the namespace's running restore to COMPLETED or FAILED.
+func (adh *AdminHandler) CloseNamespaceRestore(
+	ctx context.Context,
+	request *adminservice.CloseNamespaceRestoreRequest,
+) (_ *adminservice.CloseNamespaceRestoreResponse, err error) {
+	defer log.CapturePanic(adh.logger, &err)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetNamespaceId() == "" || request.GetRestoreId() == "" {
+		return nil, serviceerror.NewInvalidArgument("namespace_id and restore_id are required.")
+	}
+	err = adh.namespaceHandler.CloseNamespaceRestore(ctx, namespace.ID(request.GetNamespaceId()), request.GetRestoreId(), request.GetState())
+	if err != nil {
+		return nil, err
+	}
+	return &adminservice.CloseNamespaceRestoreResponse{}, nil
 }
 
 // RefreshWorkflowTasks re-generates the workflow tasks

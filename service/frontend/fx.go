@@ -144,6 +144,7 @@ var Module = fx.Options(
 	fx.Provide(AdminHandlerProvider),
 	fx.Provide(NamespaceMutationTaskExecutorProvider),
 	fx.Provide(NamespaceDLQHandlerProvider),
+	fx.Provide(NamespaceLifecycleHandlerProvider),
 	fx.Provide(OperatorHandlerProvider),
 	fx.Provide(NewVersionChecker),
 	fx.Provide(ServiceResolverProvider),
@@ -888,6 +889,7 @@ func AdminHandlerProvider(
 	metricsHandler metrics.Handler,
 	namespaceDLQHandler nsreplication.DLQMessageHandler,
 	namespaceMutationExecutor nsreplication.MutationTaskExecutor,
+	nsHandler *namespaceHandler,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
 		persistenceConfig,
@@ -921,7 +923,7 @@ func AdminHandlerProvider(
 		taskCategoryRegistry,
 		matchingClient,
 	}
-	return NewAdminHandler(args, namespaceDLQHandler, namespaceMutationExecutor)
+	return NewAdminHandler(args, namespaceDLQHandler, namespaceMutationExecutor, nsHandler)
 }
 
 func NamespaceMutationTaskExecutorProvider(
@@ -975,6 +977,46 @@ func NamespaceDLQHandlerProvider(
 	)
 }
 
+// NamespaceLifecycleHandlerProvider builds the namespace handler that the operator and admin
+// handlers use for namespace lifecycle writes.
+func NamespaceLifecycleHandlerProvider(
+	configuration *Config,
+	logger log.SnTaggedLogger,
+	eventLogger otellog.Logger,
+	metricsHandler metrics.Handler,
+	clusterMetadata cluster.Metadata,
+	namespaceRegistry namespace.Registry,
+	persistenceMetadataManager persistence.MetadataManager,
+	namespaceReplicationQueue FEReplicatorNamespaceReplicationQueue,
+	archivalMetadata archiver.ArchivalMetadata,
+	archiverProvider provider.ArchiverProvider,
+	timeSource clock.TimeSource,
+	chasmNsReplClient namespacereplicationpb.NamespaceReplicationServiceClient,
+	replicationResolverFactory namespace.ReplicationResolverFactory,
+) *namespaceHandler {
+	return newNamespaceHandler(
+		logger,
+		eventLogger,
+		persistenceMetadataManager,
+		namespaceRegistry,
+		clusterMetadata,
+		nsreplication.NewReplicator(
+			namespaceReplicationQueue,
+			logger,
+			eventLogger,
+			configuration.EmitNamespaceLifecycleEvents,
+			clusterMetadata.GetCurrentClusterName(),
+		),
+		archivalMetadata,
+		archiverProvider,
+		timeSource,
+		configuration,
+		chasmNsReplClient,
+		metricsHandler,
+		replicationResolverFactory,
+	)
+}
+
 func OperatorHandlerProvider(
 	configuration *Config,
 	logger log.SnTaggedLogger,
@@ -990,13 +1032,8 @@ func OperatorHandlerProvider(
 	clientFactory client.Factory,
 	namespaceRegistry namespace.Registry,
 	nexusEndpointClient *NexusEndpointClient,
-	persistenceMetadataManager persistence.MetadataManager,
-	namespaceReplicationQueue FEReplicatorNamespaceReplicationQueue,
-	archivalMetadata archiver.ArchivalMetadata,
-	archiverProvider provider.ArchiverProvider,
-	timeSource clock.TimeSource,
-	chasmNsReplClient namespacereplicationpb.NamespaceReplicationServiceClient,
-	replicationResolverFactory namespace.ReplicationResolverFactory,
+	nsHandler *namespaceHandler,
+	clientBean client.Bean,
 ) *OperatorHandlerImpl {
 	args := NewOperatorHandlerImplArgs{
 		configuration,
@@ -1013,27 +1050,8 @@ func OperatorHandlerProvider(
 		clientFactory,
 		namespaceRegistry,
 		nexusEndpointClient,
-		newNamespaceHandler(
-			logger,
-			eventLogger,
-			persistenceMetadataManager,
-			namespaceRegistry,
-			clusterMetadata,
-			nsreplication.NewReplicator(
-				namespaceReplicationQueue,
-				logger,
-				eventLogger,
-				configuration.EmitNamespaceLifecycleEvents,
-				clusterMetadata.GetCurrentClusterName(),
-			),
-			archivalMetadata,
-			archiverProvider,
-			timeSource,
-			configuration,
-			chasmNsReplClient,
-			metricsHandler,
-			replicationResolverFactory,
-		),
+		nsHandler,
+		clientBean,
 	}
 	return NewOperatorHandlerImpl(args)
 }

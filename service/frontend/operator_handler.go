@@ -2,6 +2,7 @@ package frontend
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"sync/atomic"
@@ -66,6 +67,7 @@ type (
 		namespaceRegistry      namespace.Registry
 		nexusEndpointClient    *NexusEndpointClient
 		namespaceHandler       *namespaceHandler
+		clientBean             svc.Bean
 	}
 
 	NewOperatorHandlerImplArgs struct {
@@ -84,6 +86,7 @@ type (
 		namespaceRegistry      namespace.Registry
 		nexusEndpointClient    *NexusEndpointClient
 		namespaceHandler       *namespaceHandler
+		clientBean             svc.Bean
 	}
 )
 
@@ -115,6 +118,7 @@ func NewOperatorHandlerImpl(
 		namespaceRegistry:      args.namespaceRegistry,
 		nexusEndpointClient:    args.nexusEndpointClient,
 		namespaceHandler:       args.namespaceHandler,
+		clientBean:             args.clientBean,
 	}
 
 	return handler
@@ -619,6 +623,9 @@ func (h *OperatorHandlerImpl) SoftDeleteNamespace(
 		return nil, errRequestNotSet
 	}
 	err := h.namespaceHandler.SoftDeleteNamespace(ctx, namespace.Name(request.GetNamespace()), namespace.ID(request.GetNamespaceId()))
+	if hostedElsewhere, ok := errors.AsType[*restoreHostedElsewhereError](err); ok {
+		return h.forwardSoftDeleteNamespace(ctx, hostedElsewhere.hostCluster, request)
+	}
 	if err != nil {
 		return nil, err
 	}

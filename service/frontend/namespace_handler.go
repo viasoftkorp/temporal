@@ -761,19 +761,12 @@ func (d *namespaceHandler) UpdateNamespace(
 	return response, nil
 }
 
-// SoftDeleteNamespace moves a REGISTERED namespace to SOFT_DELETED. On a namespace that is already
-// SOFT_DELETED, it replicates the record again, so a retry still reaches peers.
+// SoftDeleteNamespace moves a REGISTERED namespace to SOFT_DELETED, marking a running restore
+// FAILED in the same write. On a namespace that is already SOFT_DELETED, it replicates the record
+// again, so a retry still reaches peers. If the namespace's running restore is hosted on another
+// cluster, it returns a *restoreHostedElsewhereError without writing.
 func (d *namespaceHandler) SoftDeleteNamespace(ctx context.Context, nsName namespace.Name, nsID namespace.ID) error {
-	// The notification version is the lock on the namespace table, so read it first.
-	metadata, err := d.metadataMgr.GetMetadata(ctx)
-	if err != nil {
-		return err
-	}
-	notificationVersion := metadata.NotificationVersion
-	getResponse, err := d.metadataMgr.GetNamespace(ctx, &persistence.GetNamespaceRequest{
-		Name: nsName.String(),
-		ID:   nsID.String(),
-	})
+	getResponse, notificationVersion, err := d.readNamespaceForWrite(ctx, nsName, nsID)
 	if err != nil {
 		return err
 	}
@@ -782,6 +775,11 @@ func (d *namespaceHandler) SoftDeleteNamespace(ctx context.Context, nsName names
 	if detail.Info.Id == primitives.SystemNamespaceID {
 		return errSoftDeleteSystemNamespace
 	}
+	restore := detail.Info.GetRestoreInfo()
+	restoreRunning := restore.GetState() == enumspb.NAMESPACE_RESTORE_STATE_RUNNING
+	if restoreRunning && restore.GetHostCluster() != d.clusterMetadata.GetCurrentClusterName() {
+		return &restoreHostedElsewhereError{hostCluster: restore.GetHostCluster()}
+	}
 	eventBefore := namespaceStateFields(detail, isGlobalNamespace)
 	previousReplicationClusters := d.replicationClusters(common.CloneProto(detail))
 
@@ -789,6 +787,10 @@ func (d *namespaceHandler) SoftDeleteNamespace(ctx context.Context, nsName names
 	switch detail.Info.State {
 	case enumspb.NAMESPACE_STATE_REGISTERED:
 		detail.Info.State = enumspb.NAMESPACE_STATE_SOFT_DELETED
+		if restoreRunning {
+			restore.State = enumspb.NAMESPACE_RESTORE_STATE_FAILED
+			restore.CloseTime = timestamppb.New(d.timeSource.Now())
+		}
 		detail.ConfigVersion++
 		updateReq = &persistence.UpdateNamespaceRequest{
 			Namespace:           detail,

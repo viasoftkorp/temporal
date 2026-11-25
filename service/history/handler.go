@@ -1722,6 +1722,9 @@ func (h *Handler) RefreshWorkflowTasks(ctx context.Context, request *historyserv
 	if err != nil {
 		return nil, h.convertError(err)
 	}
+	if err := h.checkRefreshNamespaceVersion(namespaceID, request.GetRequest().GetMinNamespaceConfigVersion()); err != nil {
+		return nil, err
+	}
 
 	err = engine.RefreshWorkflowTasks(
 		ctx,
@@ -1736,6 +1739,33 @@ func (h *Handler) RefreshWorkflowTasks(ctx context.Context, request *historyserv
 	}
 
 	return &historyservice.RefreshWorkflowTasksResponse{}, nil
+}
+
+// checkRefreshNamespaceVersion rejects a refresh this host's namespace registry isn't ready for.
+// A restore refreshes with the namespace's restore version: tasks regenerated while the registry
+// still shows the namespace SOFT_DELETED would be discarded by the task gate. The registry isn't
+// read through, since it catches up within its refresh interval and the caller retries.
+func (h *Handler) checkRefreshNamespaceVersion(namespaceID namespace.ID, minConfigVersion int64) error {
+	if minConfigVersion == 0 {
+		return nil
+	}
+	ns, err := h.namespaceRegistry.GetNamespaceByID(namespaceID)
+	if err != nil {
+		return err
+	}
+	if ns.ConfigVersion() < minConfigVersion {
+		return serviceerror.NewUnavailablef(
+			"namespace %s is at config version %d on this host, below the required %d",
+			ns.Name(), ns.ConfigVersion(), minConfigVersion,
+		)
+	}
+	if ns.State() != enumspb.NAMESPACE_STATE_REGISTERED {
+		return serviceerror.NewFailedPreconditionf(
+			"namespace %s is in state %s at config version %d",
+			ns.Name(), ns.State(), ns.ConfigVersion(),
+		)
+	}
+	return nil
 }
 
 func (h *Handler) GenerateLastHistoryReplicationTasks(

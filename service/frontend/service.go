@@ -179,6 +179,9 @@ type Config struct {
 	// Default is 0, means, namespace will be deleted immediately.
 	DeleteNamespaceNamespaceDeleteDelay dynamicconfig.DurationPropertyFn
 
+	// How long RestoreNamespace waits for every cluster to apply the restore.
+	NamespaceRestoreConvergenceWait dynamicconfig.DurationPropertyFn
+
 	// Enable schedule-related RPCs
 	EnableSchedules dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	// Ceiling on the V1 scheduler workflow's recorded version.
@@ -399,6 +402,7 @@ func NewConfig(
 		DeleteNamespacePagesPerExecution:                    dynamicconfig.DeleteNamespacePagesPerExecution.Get(dc),
 		DeleteNamespaceConcurrentDeleteExecutionsActivities: dynamicconfig.DeleteNamespaceConcurrentDeleteExecutionsActivities.Get(dc),
 		DeleteNamespaceNamespaceDeleteDelay:                 dynamicconfig.DeleteNamespaceNamespaceDeleteDelay.Get(dc),
+		NamespaceRestoreConvergenceWait:                     dynamicconfig.NamespaceRestoreConvergenceWait.Get(dc),
 
 		MaxFairnessWeightOverrideConfigLimit: dynamicconfig.MatchingMaxFairnessKeyWeightOverrides.Get(dc),
 

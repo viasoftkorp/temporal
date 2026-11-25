@@ -1655,6 +1655,16 @@ var (
 		WithDescription("The number of workflow executions that wasn't found by DeleteExecutions workflow"),
 	)
 
+	// Namespace restore metrics.
+	NamespaceRestoreRefreshFailureCount = NewCounterDef(
+		"namespace_restore_refresh_failure",
+		WithDescription("The number of failed attempts by a namespace restore job to refresh an execution, tagged by target cluster"),
+	)
+	NamespaceRestoreDataLossCount = NewCounterDef(
+		"namespace_restore_data_loss",
+		WithDescription("The number of executions a namespace restore job skipped because their mutable state can't be read"),
+	)
+
 	// Batcher metrics.
 	BatcherProcessorSuccess = NewCounterDef(
 		"batcher_processor_requests",
