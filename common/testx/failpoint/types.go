@@ -9,6 +9,10 @@ const (
 	ActionUnspecified Action = iota
 	ActionOff
 	ActionReturn
+	ActionPanic
+	ActionBlock
+	ActionPause
+	ActionCall
 	// ActionOn activates a boolean switch failpoint (e.g. "skip sync match" or "use smaller batch")
 	// without returning a specific value or error. Call sites check it with ExecuteSwitch.
 	ActionOn
@@ -22,6 +26,14 @@ func (a Action) String() string {
 		return "Off"
 	case ActionReturn:
 		return "Return"
+	case ActionPanic:
+		return "Panic"
+	case ActionBlock:
+		return "Block"
+	case ActionPause:
+		return "Pause"
+	case ActionCall:
+		return "Call"
 	case ActionOn:
 		return "On"
 	default:
