@@ -69,6 +69,7 @@ func newActivityTestEnv(t *testing.T, currentCluster string) *activityTestEnv {
 		dynamicconfig.GetIntPropertyFn(4),
 		metrics.NoopMetricsHandler,
 		log.NewNoopLogger(),
+		log.NewNoopLogger(),
 	)
 	te.activities.inlineRetryInterval = time.Millisecond
 	te.activities.deferredRetryInterval = time.Millisecond

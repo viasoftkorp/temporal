@@ -144,7 +144,7 @@ var Module = fx.Options(
 	fx.Provide(AdminHandlerProvider),
 	fx.Provide(NamespaceMutationTaskExecutorProvider),
 	fx.Provide(NamespaceDLQHandlerProvider),
-	fx.Provide(NamespaceLifecycleHandlerProvider),
+	fx.Provide(NamespaceHandlerProvider),
 	fx.Provide(OperatorHandlerProvider),
 	fx.Provide(NewVersionChecker),
 	fx.Provide(ServiceResolverProvider),
@@ -977,9 +977,9 @@ func NamespaceDLQHandlerProvider(
 	)
 }
 
-// NamespaceLifecycleHandlerProvider builds the namespace handler that the operator and admin
-// handlers use for namespace lifecycle writes.
-func NamespaceLifecycleHandlerProvider(
+// NamespaceHandlerProvider builds the namespace handler that the workflow, operator, and admin
+// handlers share.
+func NamespaceHandlerProvider(
 	configuration *Config,
 	logger log.SnTaggedLogger,
 	eventLogger otellog.Logger,
@@ -1080,24 +1080,19 @@ func HandlerProvider(
 	dcRedirectionPolicy config.DCRedirectionPolicy,
 	serviceConfig *Config,
 	versionChecker *VersionChecker,
-	namespaceReplicationQueue FEReplicatorNamespaceReplicationQueue,
 	visibilityMgr manager.VisibilityManager,
 	chasmVisibilityMgr chasm.VisibilityManager,
 	logger log.SnTaggedLogger,
-	eventLogger otellog.Logger,
 	throttledLogger log.ThrottledLogger,
 	persistenceExecutionManager persistence.ExecutionManager,
 	clusterMetadataManager persistence.ClusterMetadataManager,
-	persistenceMetadataManager persistence.MetadataManager,
 	clientBean client.Bean,
 	historyClient resource.HistoryClient,
 	matchingClient resource.MatchingClient,
 	workerDeploymentStoreClient workerdeployment.Client,
 	schedulerClient schedulerpb.SchedulerServiceClient,
 	archiverProvider provider.ArchiverProvider,
-	metricsHandler metrics.Handler,
 	payloadSerializer serialization.Serializer,
-	timeSource clock.TimeSource,
 	namespaceRegistry namespace.Registry,
 	saMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
@@ -1114,8 +1109,7 @@ func HandlerProvider(
 	nexusOperationHandler chasmnexus.FrontendHandler,
 	registry *chasm.Registry,
 	frontendServiceResolver membership.ServiceResolver,
-	chasmNsReplClient namespacereplicationpb.NamespaceReplicationServiceClient,
-	replicationResolverFactory namespace.ReplicationResolverFactory,
+	nsHandler *namespaceHandler,
 ) Handler {
 	workerDeploymentReadRateLimiter := configs.NewGlobalNamespaceRateLimiter(
 		frontendServiceResolver,
@@ -1128,14 +1122,12 @@ func HandlerProvider(
 		callbackValidator,
 		linkValidator,
 		serviceConfig,
-		namespaceReplicationQueue,
+		nsHandler,
 		visibilityMgr,
 		logger,
-		eventLogger,
 		throttledLogger,
 		persistenceExecutionManager.GetName(),
 		clusterMetadataManager,
-		persistenceMetadataManager,
 		historyClient,
 		matchingClient,
 		workerDeploymentStoreClient,
@@ -1149,7 +1141,6 @@ func HandlerProvider(
 		clusterMetadata,
 		archivalMetadata,
 		healthServer,
-		timeSource,
 		membershipMonitor,
 		healthInterceptor,
 		scheduleSpecBuilder,
@@ -1164,9 +1155,6 @@ func HandlerProvider(
 			saValidator,
 			linkValidator,
 		),
-		chasmNsReplClient,
-		metricsHandler,
-		replicationResolverFactory,
 	)
 	return wfHandler
 }

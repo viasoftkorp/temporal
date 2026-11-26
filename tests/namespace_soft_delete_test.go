@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
@@ -30,7 +31,7 @@ func TestNamespaceSoftDeleteSuite(t *testing.T) {
 }
 
 func (s *namespaceSoftDeleteSuite) TestSoftDeleteNamespace() {
-	env := testcore.NewEnv(s.T())
+	env := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.EnableNamespaceSoftDelete, true))
 
 	_, err := env.OperatorClient().SoftDeleteNamespace(s.Context(), &operatorservice.SoftDeleteNamespaceRequest{
 		Namespace: env.Namespace().String(),
@@ -64,7 +65,7 @@ func (s *namespaceSoftDeleteSuite) TestSoftDeleteNamespace() {
 }
 
 func (s *namespaceSoftDeleteSuite) TestSoftDeleteNamespace_SystemNamespace() {
-	env := testcore.NewEnv(s.T())
+	env := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.EnableNamespaceSoftDelete, true))
 
 	_, err := env.OperatorClient().SoftDeleteNamespace(s.Context(), &operatorservice.SoftDeleteNamespaceRequest{
 		Namespace: primitives.SystemLocalNamespace,
@@ -74,7 +75,7 @@ func (s *namespaceSoftDeleteSuite) TestSoftDeleteNamespace_SystemNamespace() {
 }
 
 func (s *namespaceSoftDeleteSuite) TestRestoreNamespace_TimerFires() {
-	env := testcore.NewEnv(s.T(), testcore.WithWorkerService("namespace restore job"))
+	env := testcore.NewEnv(s.T(), testcore.WithWorkerService("namespace restore job"), testcore.WithDynamicConfig(dynamicconfig.EnableNamespaceSoftDelete, true))
 	tv := env.Tv()
 	runID := mustStartWorkflow(env, tv)
 	startTimer(s, env, tv, 2*time.Second)
@@ -124,7 +125,7 @@ func (s *namespaceSoftDeleteSuite) TestDescribeNamespaceRestore_NeverRestored() 
 }
 
 func (s *namespaceSoftDeleteSuite) TestSoftDeleteNamespace_AbandonsRestore() {
-	env := testcore.NewEnv(s.T(), testcore.WithWorkerService("namespace restore job"))
+	env := testcore.NewEnv(s.T(), testcore.WithWorkerService("namespace restore job"), testcore.WithDynamicConfig(dynamicconfig.EnableNamespaceSoftDelete, true))
 	_, err := env.OperatorClient().SoftDeleteNamespace(s.Context(), &operatorservice.SoftDeleteNamespaceRequest{
 		Namespace: env.Namespace().String(),
 	})
@@ -157,7 +158,7 @@ func (s *namespaceSoftDeleteSuite) TestSoftDeleteNamespace_AbandonsRestore() {
 }
 
 func (s *namespaceSoftDeleteSuite) TestSoftDeleteNamespace_TimerDoesNotFire() {
-	env := testcore.NewEnv(s.T())
+	env := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.EnableNamespaceSoftDelete, true))
 	tv := env.Tv()
 	runID := mustStartWorkflow(env, tv)
 	// Long enough for history's namespace registry to see the soft delete first.

@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
@@ -24,7 +25,14 @@ func (s *namespaceHandlerCommonSuite) runningRestoreResponse(nid string, hostClu
 	return response
 }
 
+// expectNamespaceRead expects the read of an UpdateNamespace write, and stubs the cluster metadata
+// its validation reads.
 func (s *namespaceHandlerCommonSuite) expectNamespaceRead(response *persistence.GetNamespaceResponse) {
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
+		"cluster1": {Enabled: true, InitialFailoverVersion: 1},
+		"cluster2": {Enabled: true, InitialFailoverVersion: 2},
+	}).AnyTimes()
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{NotificationVersion: 7}, nil)
 	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(response, nil)
 }

@@ -29,6 +29,7 @@ type (
 		ClusterMetadata   cluster.Metadata
 		MetricsHandler    metrics.Handler
 		Logger            log.Logger
+		ThrottledLogger   log.ThrottledLogger
 	}
 )
 
@@ -45,6 +46,7 @@ func newComponent(params componentParams) workercommon.WorkerComponent {
 			dynamicconfig.NamespaceRestoreRefreshConcurrency.Get(params.DynamicCollection),
 			params.MetricsHandler,
 			params.Logger,
+			params.ThrottledLogger,
 		),
 	}
 }

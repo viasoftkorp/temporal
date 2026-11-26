@@ -56,6 +56,8 @@ type (
 		concurrency       dynamicconfig.IntPropertyFn
 		metricsHandler    metrics.Handler
 		logger            log.Logger
+		// throttledLogger logs per-execution problems, which can number in the millions.
+		throttledLogger log.Logger
 
 		inlineRetryInterval      time.Duration
 		deferredRetryInterval    time.Duration
@@ -91,6 +93,7 @@ func NewActivities(
 	concurrency dynamicconfig.IntPropertyFn,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
+	throttledLogger log.Logger,
 ) *Activities {
 	return &Activities{
 		visibilityManager:        visibilityManager,
@@ -101,6 +104,7 @@ func NewActivities(
 		concurrency:              concurrency,
 		metricsHandler:           metricsHandler,
 		logger:                   logger,
+		throttledLogger:          throttledLogger,
 		inlineRetryInterval:      time.Second,
 		deferredRetryInterval:    10 * time.Second,
 		maxDeferredRetryInterval: 5 * time.Minute,
@@ -174,9 +178,6 @@ func (a *Activities) RefreshExecutions(ctx context.Context, input RestoreJobInpu
 
 	state.Lock()
 	defer state.Unlock()
-	logger.Info("Namespace restore refreshed every execution.",
-		tag.NewInt64("processed", state.hb.ProcessedCount),
-		tag.NewInt64("data-loss", state.hb.DataLossCount))
 	return state.hb.RefreshStats, nil
 }
 
@@ -427,7 +428,7 @@ func (a *Activities) refreshOnCluster(
 			return false, nil
 		case errors.As(err, &dataLossErr):
 			metrics.NamespaceRestoreDataLossCount.With(a.metricsHandler).Record(1, metrics.TargetClusterTag(cluster))
-			a.logger.Error("Namespace restore skipped an execution whose mutable state can't be read.",
+			a.throttledLogger.Error("Namespace restore skipped an execution whose mutable state can't be read.",
 				tag.WorkflowNamespaceID(input.NamespaceID),
 				tag.WorkflowID(execution.GetWorkflowId()),
 				tag.WorkflowRunID(execution.GetRunId()),
@@ -435,14 +436,10 @@ func (a *Activities) refreshOnCluster(
 				tag.Error(err))
 			return true, nil
 		}
+		// Counted, not logged: a cluster that is down fails every execution. The executions still
+		// failing are in the heartbeat's deferred set.
 		metrics.NamespaceRestoreRefreshFailureCount.With(a.metricsHandler).Record(1, metrics.TargetClusterTag(cluster))
 		if attempt >= attempts {
-			a.logger.Warn("Namespace restore failed to refresh an execution.",
-				tag.WorkflowNamespaceID(input.NamespaceID),
-				tag.WorkflowID(execution.GetWorkflowId()),
-				tag.WorkflowRunID(execution.GetRunId()),
-				tag.ClusterName(cluster),
-				tag.Error(err))
 			return false, err
 		}
 		if err := sleep(ctx, interval); err != nil {
