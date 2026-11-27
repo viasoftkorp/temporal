@@ -1002,6 +1002,18 @@ var (
 		"chasm_incoming_signal_written",
 		WithDescription("The number of signal backlinks written to the CHASM IncomingSignals map."),
 	)
+	HistoryEventLinksAttached = NewCounterDef(
+		"history_event_links_attached",
+		WithDescription("Number of top-level links carried by newly added history events, by namespace, event type, and link variant."),
+	)
+	HistoryEventLinksPerEvent = NewDimensionlessHistogramDef(
+		"history_event_links_per_event",
+		WithDescription("Number of top-level links per newly added history event that carries links, by namespace and event type."),
+	)
+	HistoryEventCompletionCallbacksAttached = NewCounterDef(
+		"history_event_completion_callbacks_attached",
+		WithDescription("Number of completion callbacks carried by newly added history events, by namespace and event type."),
+	)
 	ChasmIncomingSignalDuplicate = NewCounterDef(
 		"chasm_incoming_signal_duplicate",
 		WithDescription("The number of duplicate signal request IDs detected when writing to the CHASM IncomingSignals map. Non-zero values indicate unexpected signal redelivery."),
