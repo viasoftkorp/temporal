@@ -1002,6 +1002,10 @@ var (
 		"chasm_incoming_signal_written",
 		WithDescription("The number of signal backlinks written to the CHASM IncomingSignals map."),
 	)
+	AttachLimitExceeded = NewCounterDef(
+		"attach_limit_exceeded",
+		WithDescription("Number of callback or link attachment rejections, by namespace and the dynamic config limit exceeded."),
+	)
 	HistoryEventLinksAttached = NewCounterDef(
 		"history_event_links_attached",
 		WithDescription("Number of top-level links carried by newly added history events, by namespace, event type, and link variant."),
